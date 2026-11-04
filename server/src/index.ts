@@ -54,9 +54,9 @@ const realtime = createRealtimePoller(RT_INTERVAL_MS, (m) => app.log.warn(m));
 const SELF_URL = process.env.RENDER_EXTERNAL_URL;
 if (SELF_URL) {
   setInterval(() => {
-    fetch(`${SELF_URL}/api/health`, { signal: AbortSignal.timeout(30_000) }).catch((err) =>
-      app.log.warn(`Auto-ping fallido: ${(err as Error).message}`),
-    );
+    fetch(`${SELF_URL}/api/health`, { signal: AbortSignal.timeout(30_000) })
+      .then((res) => app.log.info(`Auto-ping OK (HTTP ${res.status})`))
+      .catch((err) => app.log.warn(`Auto-ping fallido: ${(err as Error).message}`));
   }, 10 * 60_000);
 }
 
@@ -65,7 +65,8 @@ setInterval(() => {
   if (gtfs && gtfs.today !== localDate(Date.now())) void refreshGtfs();
 }, 10 * 60_000);
 
-app.get('/api/health', async (): Promise<HealthResponse> => ({
+// Render llama a /api/health cada 5 s (healthCheckPath): no se registra para no llenar los logs.
+app.get('/api/health', { logLevel: 'warn' }, async (): Promise<HealthResponse> => ({
   ok: gtfs != null,
   gtfsLoadedAt: gtfs?.loadedAt ?? null,
   gtfsStops: gtfs?.stops.size ?? 0,
