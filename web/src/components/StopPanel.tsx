@@ -1,10 +1,13 @@
 import type { Arrival, ArrivalsResponse, Stop } from '@renfe/shared';
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { fetchArrivals } from '../lib/api';
 import { formatTime } from '../lib/text';
 import { LineChip } from './LineChip';
 
 const REFRESH_MS = 30_000;
+const MAX_ROWS = 12;
+
+type Tab = 'departures' | 'arrivals';
 
 interface Props {
   stop: Stop;
@@ -42,7 +45,6 @@ function ArrivalRow({ a }: { a: Arrival }) {
               formatTime(a.scheduled)
             )}
           </span>
-          {a.terminates && <span className="badge muted">Final de trayecto</span>}
         </div>
       </div>
       <div className="eta" aria-label={`${a.minutes} minutos`}>
@@ -61,11 +63,15 @@ export function StopPanel({ stop, isFavorite, onToggleFavorite, onClose }: Props
   const [data, setData] = useState<ArrivalsResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [tab, setTab] = useState<Tab>('departures');
+  const [lineFilter, setLineFilter] = useState<string[]>([]);
 
   useEffect(() => {
     setData(null);
     setError(null);
     setLoading(true);
+    setTab('departures');
+    setLineFilter([]);
     let ctrl = new AbortController();
 
     const load = async () => {
@@ -95,6 +101,26 @@ export function StopPanel({ stop, isFavorite, onToggleFavorite, onClose }: Props
     };
   }, [stop.id]);
 
+  const all = data?.arrivals ?? [];
+  const byLine = useMemo(
+    () => (lineFilter.length ? all.filter((a) => lineFilter.includes(a.line.name)) : all),
+    [all, lineFilter],
+  );
+  const departures = byLine.filter((a) => !a.terminates);
+  const arrivals = byLine.filter((a) => a.terminates);
+  // Pestañas solo donde terminan trenes (estaciones finales); en las intermedias no aportan.
+  const showTabs = all.some((a) => a.terminates);
+  const visible = (showTabs && tab === 'arrivals' ? arrivals : showTabs ? departures : byLine).slice(0, MAX_ROWS);
+
+  const toggleLine = (name: string) =>
+    setLineFilter((prev) => (prev.includes(name) ? prev.filter((n) => n !== name) : [...prev, name]));
+
+  const emptyText = lineFilter.length
+    ? `No hay trenes de ${lineFilter.join(', ')} en los próximos 90 minutos.`
+    : showTabs && tab === 'arrivals'
+      ? 'No llega ningún tren que termine aquí en los próximos 90 minutos.'
+      : 'No hay trenes previstos en los próximos 90 minutos.';
+
   return (
     <section className="panel" aria-label={`Próximos trenes en ${stop.name}`}>
       <header className="panel-header">
@@ -102,11 +128,7 @@ export function StopPanel({ stop, isFavorite, onToggleFavorite, onClose }: Props
           <h2>{stop.name}</h2>
           <div className="panel-meta">
             <span>{stop.network}</span>
-            <span className="chips">
-              {stop.lines.map((l) => (
-                <LineChip key={l.name} line={l} small />
-              ))}
-            </span>
+            {stop.lines.length === 1 && <LineChip line={stop.lines[0]} small />}
           </div>
         </div>
         <button
@@ -122,15 +144,49 @@ export function StopPanel({ stop, isFavorite, onToggleFavorite, onClose }: Props
         </button>
       </header>
 
+      <div className="panel-controls">
+        {stop.lines.length > 1 && (
+          <div className="line-filter" role="group" aria-label="Filtrar por línea">
+            {stop.lines.map((l) => {
+              const on = lineFilter.includes(l.name);
+              return (
+                <button
+                  key={l.name}
+                  className={`line-toggle${on ? ' on' : ''}${lineFilter.length && !on ? ' dim' : ''}`}
+                  aria-pressed={on}
+                  title={on ? `Quitar filtro ${l.name}` : `Ver solo ${l.name}`}
+                  onClick={() => toggleLine(l.name)}
+                >
+                  <LineChip line={l} />
+                </button>
+              );
+            })}
+            {lineFilter.length > 0 && (
+              <button className="clear-filter" onClick={() => setLineFilter([])}>
+                Todas
+              </button>
+            )}
+          </div>
+        )}
+        {showTabs && (
+          <div className="tabs" role="tablist">
+            <button role="tab" aria-selected={tab === 'departures'} onClick={() => setTab('departures')}>
+              Salidas <span className="count">{departures.length}</span>
+            </button>
+            <button role="tab" aria-selected={tab === 'arrivals'} onClick={() => setTab('arrivals')}>
+              Llegadas <span className="count">{arrivals.length}</span>
+            </button>
+          </div>
+        )}
+      </div>
+
       <div className="panel-body">
         {loading && !data && <p className="placeholder">Cargando próximos trenes…</p>}
         {error && !data && <p className="placeholder error">{error}</p>}
-        {data && data.arrivals.length === 0 && (
-          <p className="placeholder">No hay trenes previstos en los próximos 90 minutos.</p>
-        )}
-        {data && data.arrivals.length > 0 && (
+        {data && visible.length === 0 && <p className="placeholder">{emptyText}</p>}
+        {data && visible.length > 0 && (
           <ul className="arrivals">
-            {data.arrivals.map((a) => (
+            {visible.map((a) => (
               <ArrivalRow key={`${a.tripId}-${a.scheduled}`} a={a} />
             ))}
           </ul>

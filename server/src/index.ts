@@ -78,7 +78,8 @@ app.get<{ Params: { id: string } }>('/api/stops/:id/arrivals', async (req, reply
     stop,
     generatedAt: now,
     realtimeAgeSec: realtime.state.fetchedAt ? Math.round((now - realtime.state.fetchedAt) / 1000) : null,
-    arrivals: getArrivals(gtfs, realtime.state, stop.id, now),
+    // Se devuelven todos los de la ventana: la app separa salidas/llegadas y filtra por línea.
+    arrivals: getArrivals(gtfs, realtime.state, stop.id, now, { limit: 60 }),
   };
   reply.header('Cache-Control', 'no-store');
   return res;
