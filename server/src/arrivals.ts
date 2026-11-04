@@ -3,6 +3,12 @@ import type { GtfsData } from './gtfs/types.js';
 import type { RealtimeState, StopUpdate, TripRealtime } from './realtime/poller.js';
 import { addDays, localDate, serviceDayBase } from './time.js';
 
+/** Mismo criterio que la web: 0 ("Ahora") a menos de 30 s; si no, minutos redondeados. */
+export function minutesUntil(estimatedMs: number, nowMs: number): number {
+  const secs = (estimatedMs - nowMs) / 1000;
+  return secs <= 30 ? 0 : Math.max(1, Math.round(secs / 60));
+}
+
 export interface ArrivalsOptions {
   /** Cuántos minutos hacia delante buscar trenes. */
   windowMin?: number;
@@ -56,7 +62,7 @@ export function getArrivals(
         headsign: trip.headsign,
         scheduled,
         estimated,
-        minutes: Math.max(0, Math.floor((estimated - nowMs) / 60_000)),
+        minutes: minutesUntil(estimated, nowMs),
         delaySec,
         realtime: rtTrip != null,
         cancelled: !!rtTrip?.cancelled || !!rtStop?.skipped,

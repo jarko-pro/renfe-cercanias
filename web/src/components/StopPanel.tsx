@@ -17,8 +17,29 @@ interface Props {
   onClose: () => void;
 }
 
-function ArrivalRow({ a }: { a: Arrival }) {
+/** Cada cuánto se recalcula la cuenta atrás en pantalla. */
+const TICK_MS = 5_000;
+/** El tren sale de la lista 30 s después de su hora estimada. */
+const HIDE_AFTER_MS = 30_000;
+
+/** 0 = "Ahora" (a menos de 30 s); si no, minutos redondeados. Mismo criterio que el servidor. */
+function minutesUntil(estimatedMs: number, nowMs: number): number {
+  const secs = (estimatedMs - nowMs) / 1000;
+  return secs <= 30 ? 0 : Math.max(1, Math.round(secs / 60));
+}
+
+function useNow(intervalMs: number): number {
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const id = setInterval(() => setNow(Date.now()), intervalMs);
+    return () => clearInterval(id);
+  }, [intervalMs]);
+  return now;
+}
+
+function ArrivalRow({ a, now }: { a: Arrival; now: number }) {
   const delayMin = a.delaySec != null ? Math.round(a.delaySec / 60) : 0;
+  const minutes = minutesUntil(a.estimated, now);
   return (
     <li className={`arrival${a.cancelled ? ' cancelled' : ''}`}>
       <LineChip line={a.line} />
@@ -48,10 +69,10 @@ function ArrivalRow({ a }: { a: Arrival }) {
           </span>
         </div>
       </div>
-      <div className="eta" aria-label={`${a.minutes} minutos`}>
-        {a.cancelled ? '—' : a.minutes === 0 ? <span className="now">Ahora</span> : (
+      <div className="eta" aria-label={minutes === 0 ? 'Llegando ahora' : `${minutes} minutos`}>
+        {a.cancelled ? '—' : minutes === 0 ? <span className="now">Ahora</span> : (
           <>
-            <strong>{a.minutes}</strong>
+            <strong>{minutes}</strong>
             <span>min</span>
           </>
         )}
@@ -112,7 +133,12 @@ export function StopPanel({ stop, isFavorite, onToggleFavorite, onClose }: Props
     };
   }, [stop.id]);
 
-  const all = data?.arrivals ?? [];
+  const now = useNow(TICK_MS);
+  // Quita en vivo los trenes que ya han pasado, sin esperar al siguiente refresco.
+  const all = useMemo(
+    () => (data?.arrivals ?? []).filter((a) => a.estimated >= now - HIDE_AFTER_MS),
+    [data, now],
+  );
   const byLine = useMemo(
     () => (lineFilter.length ? all.filter((a) => lineFilter.includes(a.line.name)) : all),
     [all, lineFilter],
@@ -209,7 +235,7 @@ export function StopPanel({ stop, isFavorite, onToggleFavorite, onClose }: Props
         {data && visible.length > 0 && (
           <ul className="arrivals">
             {visible.map((a) => (
-              <ArrivalRow key={`${a.tripId}-${a.scheduled}`} a={a} />
+              <ArrivalRow key={`${a.tripId}-${a.scheduled}`} a={a} now={now} />
             ))}
           </ul>
         )}

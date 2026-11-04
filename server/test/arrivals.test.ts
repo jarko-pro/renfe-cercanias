@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { getArrivals } from '../src/arrivals.js';
+import { getArrivals, minutesUntil } from '../src/arrivals.js';
 import { buildGtfsData } from '../src/gtfs/build.js';
 import type { GtfsSource } from '../src/gtfs/types.js';
 import type { TripRealtime } from '../src/realtime/poller.js';
@@ -68,6 +68,20 @@ describe('buildGtfsData', () => {
     const data = await buildGtfsData(source(FILES), TODAY);
     expect(data.trips.get('A')!.headsign).toBe('Destino');
     expect(data.trips.get('B')!.headsign).toBe('Atocha');
+  });
+});
+
+describe('minutesUntil', () => {
+  const now = 1_000_000_000;
+  it('muestra "Ahora" solo en los últimos 30 s', () => {
+    expect(minutesUntil(now + 30_000, now)).toBe(0);
+    expect(minutesUntil(now - 20_000, now)).toBe(0);
+    expect(minutesUntil(now + 31_000, now)).toBe(1);
+  });
+  it('redondea al minuto más cercano', () => {
+    expect(minutesUntil(now + 89_000, now)).toBe(1);
+    expect(minutesUntil(now + 100_000, now)).toBe(2);
+    expect(minutesUntil(now + 10 * 60_000, now)).toBe(10);
   });
 });
 

@@ -25,7 +25,10 @@ export interface Arrival {
   scheduled: number;
   /** Hora estimada con retraso en tiempo real (epoch ms). Igual a `scheduled` si no hay datos RT. */
   estimated: number;
-  /** Minutos que faltan hasta `estimated` (redondeado hacia abajo, mínimo 0). */
+  /**
+   * Minutos que faltan hasta `estimated` en el momento de generar la respuesta: 0 = "Ahora"
+   * (menos de 30 s), si no redondeado al minuto más cercano. La web lo recalcula en vivo.
+   */
   minutes: number;
   /** Retraso en segundos (null si no hay datos de tiempo real). */
   delaySec: number | null;
