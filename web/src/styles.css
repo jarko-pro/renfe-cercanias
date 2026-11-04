@@ -496,6 +496,56 @@ body {
   color: var(--text-2);
 }
 
+/* ---------- Aviso de instalación (PWA) ---------- */
+.install-hint {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 6px 10px 12px;
+  border-radius: var(--radius);
+  background: var(--surface);
+  box-shadow: var(--shadow);
+}
+.install-hint img {
+  flex: none;
+  border-radius: 9px;
+}
+.install-text {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: 13px;
+  line-height: 1.35;
+  color: var(--text-2);
+}
+.install-text strong {
+  font-size: 14px;
+  color: var(--text);
+}
+.install-text b {
+  color: var(--text);
+  font-weight: 600;
+}
+.share-icon {
+  vertical-align: -2px;
+  color: #2563eb;
+}
+.install-btn {
+  flex: none;
+  height: 34px;
+  padding: 0 14px;
+  border: none;
+  border-radius: 999px;
+  background: var(--brand);
+  color: #fff;
+  font: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
 /* ---------- Botón de ubicación ---------- */
 .locate-btn {
   position: absolute;
