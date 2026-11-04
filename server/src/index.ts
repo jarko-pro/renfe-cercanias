@@ -48,6 +48,18 @@ async function refreshGtfs() {
 
 const realtime = createRealtimePoller(RT_INTERVAL_MS, (m) => app.log.warn(m));
 
+// Render (plan gratuito) duerme el servidor tras 15 min sin tráfico entrante. Llamar a
+// nuestra propia URL pública sale a internet y vuelve a entrar por Render, así que cuenta
+// como visita. RENDER_EXTERNAL_URL lo define Render; en local no existe y no se hace nada.
+const SELF_URL = process.env.RENDER_EXTERNAL_URL;
+if (SELF_URL) {
+  setInterval(() => {
+    fetch(`${SELF_URL}/api/health`, { signal: AbortSignal.timeout(30_000) }).catch((err) =>
+      app.log.warn(`Auto-ping fallido: ${(err as Error).message}`),
+    );
+  }, 10 * 60_000);
+}
+
 // Recarga el GTFS cuando cambia el día local (los índices cubren ayer/hoy/mañana).
 setInterval(() => {
   if (gtfs && gtfs.today !== localDate(Date.now())) void refreshGtfs();

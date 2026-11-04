@@ -40,7 +40,7 @@ El horario de Renfe tiene huecos conocidos, así que la app marca cada tren como
 ## Publicación
 
 - **Web**: GitHub Pages. Se despliega sola con `.github/workflows/pages.yml` en cada push a `main` que cambie `web/` o `shared/`.
-- **Servidor**: Render, plan gratuito, definido en `render.yaml`. En el plan gratuito se duerme tras 15 min sin uso. Para evitarlo, un monitor externo gratuito (cron-job.org) llama a `/api/health` cada 5 min. `.github/workflows/keepalive.yml` hace lo mismo de respaldo, pero GitHub retrasa o se salta a menudo las tareas programadas, así que no basta por sí sola.
+- **Servidor**: Render, plan gratuito, definido en `render.yaml`. En el plan gratuito se duerme tras 15 min sin uso. Para evitarlo, el propio servidor llama a su URL pública (`RENDER_EXTERNAL_URL`) cada 10 min, lo que cuenta como tráfico entrante. De respaldo: `.github/workflows/keepalive.yml` (GitHub retrasa o se salta a menudo las tareas programadas) y, opcionalmente, un monitor externo como cron-job.org.
 - La web guarda la lista de estaciones en el dispositivo y reintenta sola si el servidor está despertando, así que el mapa y las favoritas funcionan desde el primer momento.
 - La web lee la URL del servidor de la variable de repositorio `API_URL` (Settings → Secrets and variables → Actions → Variables). Si la cambias, relanza el workflow.
 
