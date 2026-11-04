@@ -117,15 +117,31 @@ describe('getArrivals', () => {
     expect(res[1].delaySec).toBe(35 * 60);
   });
 
-  it('descarta trenes con retraso cuya próxima parada ya está más adelante', async () => {
+  it('muestra en origen un tren que aún no ha salido aunque el feed solo informe la parada siguiente', async () => {
+    // Caso real (Santander → Valdecilla): Renfe no publica la parada de origen.
     const data = await buildGtfsData(source(FILES), TODAY);
     const rt = {
       trips: new Map<string, TripRealtime>([
-        ['A', { delaySec: 600, cancelled: false, stops: new Map([['S3', { delaySec: 600, skipped: false }]]) }],
+        ['A', { delaySec: 0, cancelled: false, stops: new Map([['S2', { time: at(TODAY, 8, 10), skipped: false }]]) }],
       ]),
     };
-    const res = getArrivals(data, rt, 'S2', at(TODAY, 8, 5));
-    expect(res.find((a) => a.tripId === 'A')).toBeUndefined();
+    const [a] = getArrivals(data, rt, 'S1', at(TODAY, 7, 55));
+    expect(a.tripId).toBe('A');
+    expect(a.minutes).toBe(5);
+    expect(a.realtime).toBe(true);
+  });
+
+  it('usa el retraso de la parada informada más cercana si la nuestra no viene en el feed', async () => {
+    const data = await buildGtfsData(source(FILES), TODAY);
+    const rt = {
+      trips: new Map<string, TripRealtime>([
+        // Llega a S3 (08:20 programado) a las 08:27 → 7 min de retraso; el retraso del viaje dice 0.
+        ['A', { delaySec: 0, cancelled: false, stops: new Map([['S3', { time: at(TODAY, 8, 27), skipped: false }]]) }],
+      ]),
+    };
+    const [a] = getArrivals(data, rt, 'S2', at(TODAY, 8, 0));
+    expect(a.delaySec).toBe(7 * 60);
+    expect(a.minutes).toBe(17);
   });
 
   it('marca trenes cancelados', async () => {

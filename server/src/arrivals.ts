@@ -1,6 +1,6 @@
 import type { Arrival } from '@renfe/shared';
 import type { GtfsData } from './gtfs/types.js';
-import type { RealtimeState } from './realtime/poller.js';
+import type { RealtimeState, StopUpdate, TripRealtime } from './realtime/poller.js';
 import { addDays, localDate, serviceDayBase } from './time.js';
 
 export interface ArrivalsOptions {
@@ -44,19 +44,9 @@ export function getArrivals(
 
       const rtTrip = realtime.trips.get(st.tripId);
       const rtStop = rtTrip?.stops.get(stopId);
-      if (rtTrip && !rtStop && alreadyPassed(data, st.tripId, st.seq, rtTrip.stops.keys())) continue;
-      let estimated = scheduled;
-      let delaySec: number | null = null;
-      if (rtStop?.time) {
-        estimated = rtStop.time;
-        delaySec = Math.round((estimated - scheduled) / 1000);
-      } else if (rtStop?.delaySec != null) {
-        delaySec = rtStop.delaySec;
-        estimated = scheduled + delaySec * 1000;
-      } else if (rtTrip?.delaySec != null) {
-        delaySec = rtTrip.delaySec;
-        estimated = scheduled + delaySec * 1000;
-      }
+      const delaySec = rtTrip ? realtimeDelaySec(data, st.tripId, stopId, base, rtTrip) : null;
+      const estimated = delaySec != null ? scheduled + delaySec * 1000 : scheduled;
+      // Un tren que ya ha pasado tiene hora estimada en el pasado y se descarta aquí.
       if (estimated < fromMs || estimated > toMs) continue;
 
       const line = data.lines.get(trip.routeId) ?? { name: '?', color: '7A7A7A', textColor: 'FFFFFF' };
@@ -80,14 +70,40 @@ export function getArrivals(
 }
 
 /**
- * Renfe publica en tiempo real la(s) próxima(s) parada(s) de cada tren. Si todas están
- * más adelante en el recorrido que la nuestra, el tren ya ha pasado aunque vaya con retraso.
+ * Retraso en segundos de un viaje en nuestra parada.
+ *
+ * Renfe normalmente publica solo la *próxima* parada de cada tren, nunca la de origen: un
+ * tren que aún no ha salido trae la predicción de su segunda parada. Si nuestra parada no
+ * viene en el feed, usamos el retraso de la parada informada más cercana a la nuestra.
  */
-function alreadyPassed(data: GtfsData, tripId: string, seq: number, rtStopIds: Iterable<string>): boolean {
-  let minRtSeq = Infinity;
-  for (const id of rtStopIds) {
-    const st = data.stopTimesByStop.get(id)?.find((s) => s.tripId === tripId);
-    if (st && st.seq < minRtSeq) minRtSeq = st.seq;
+function realtimeDelaySec(
+  data: GtfsData,
+  tripId: string,
+  stopId: string,
+  base: number,
+  rtTrip: TripRealtime,
+): number | null {
+  const delayAt = (u: StopUpdate, arrSec: number | undefined): number | null => {
+    if (u.time != null && arrSec != null) return Math.round((u.time - (base + arrSec * 1000)) / 1000);
+    return u.delaySec ?? null;
+  };
+  const findSt = (id: string) => data.stopTimesByStop.get(id)?.find((s) => s.tripId === tripId);
+
+  const own = rtTrip.stops.get(stopId);
+  if (own) {
+    const d = delayAt(own, findSt(stopId)?.arr);
+    if (d != null) return d;
   }
-  return seq < minRtSeq && minRtSeq !== Infinity;
+
+  const ourSeq = findSt(stopId)?.seq ?? 0;
+  let best: { dist: number; delay: number } | null = null;
+  for (const [id, u] of rtTrip.stops) {
+    const st = findSt(id);
+    if (!st) continue;
+    const d = delayAt(u, st.arr);
+    if (d == null) continue;
+    const dist = Math.abs(st.seq - ourSeq);
+    if (!best || dist < best.dist) best = { dist, delay: d };
+  }
+  return best?.delay ?? rtTrip.delaySec ?? null;
 }
