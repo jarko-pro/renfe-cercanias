@@ -40,7 +40,7 @@ El horario de Renfe tiene huecos conocidos, así que la app marca cada tren como
 ## Publicación
 
 - **Web**: GitHub Pages. Se despliega sola con `.github/workflows/pages.yml` en cada push a `main` que cambie `web/` o `shared/`.
-- **Servidor**: Render, plan gratuito, definido en `render.yaml`. En el plan gratuito se duerme tras 15 min sin uso y tarda ~1 min en despertar.
+- **Servidor**: Render, plan gratuito, definido en `render.yaml`. En el plan gratuito se duerme tras 15 min sin uso. Para evitarlo, `.github/workflows/keepalive.yml` lo llama cada 10 min (GitHub desactiva los cron tras 60 días sin actividad en el repo: reactívalo en la pestaña Actions si pasa).
 - La web lee la URL del servidor de la variable de repositorio `API_URL` (Settings → Secrets and variables → Actions → Variables). Si la cambias, relanza el workflow.
 
 ## Próximos pasos

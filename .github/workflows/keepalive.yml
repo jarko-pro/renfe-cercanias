@@ -1,0 +1,23 @@
+name: Mantener servidor despierto
+
+# Render (plan gratuito) duerme el servidor tras 15 min sin peticiones.
+# Lo llamamos cada 10 min. GitHub puede retrasar los cron unos minutos.
+on:
+  schedule:
+    - cron: '*/10 * * * *'
+  workflow_dispatch:
+
+permissions: {}
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Llamar a /api/health
+        env:
+          API_URL: ${{ vars.API_URL }}
+        run: |
+          if [ -z "$API_URL" ]; then echo "API_URL no configurada"; exit 0; fi
+          # Si estaba dormido tarda ~1 min en arrancar: reintentos con espera.
+          curl -fsS --retry 6 --retry-delay 15 --retry-all-errors --max-time 90 "$API_URL/api/health"
