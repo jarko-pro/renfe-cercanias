@@ -1,10 +1,11 @@
 import type { Arrival, ArrivalsResponse, Stop } from '@renfe/shared';
 import { useEffect, useMemo, useState } from 'react';
-import { fetchArrivals } from '../lib/api';
+import { ApiError, fetchArrivals, isAbort } from '../lib/api';
 import { formatTime } from '../lib/text';
 import { LineChip } from './LineChip';
 
 const REFRESH_MS = 30_000;
+const RETRY_MS = 4_000;
 const MAX_ROWS = 12;
 
 type Tab = 'departures' | 'arrivals';
@@ -63,6 +64,7 @@ export function StopPanel({ stop, isFavorite, onToggleFavorite, onClose }: Props
   const [data, setData] = useState<ArrivalsResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [waking, setWaking] = useState(false);
   const [tab, setTab] = useState<Tab>('departures');
   const [lineFilter, setLineFilter] = useState<string[]>([]);
 
@@ -73,30 +75,39 @@ export function StopPanel({ stop, isFavorite, onToggleFavorite, onClose }: Props
     setTab('departures');
     setLineFilter([]);
     let ctrl = new AbortController();
+    let timer: ReturnType<typeof setTimeout> | undefined;
 
+    // Tras un fallo se reintenta enseguida (el servidor puede estar despertando);
+    // si va bien, se refresca cada 30 s.
     const load = async () => {
+      clearTimeout(timer);
       ctrl.abort();
       ctrl = new AbortController();
+      let next = REFRESH_MS;
       try {
         const res = await fetchArrivals(stop.id, ctrl.signal);
         setData(res);
         setError(null);
+        setWaking(false);
       } catch (e) {
-        if ((e as Error).name !== 'AbortError') setError((e as Error).message);
+        if (isAbort(e)) return;
+        setError((e as Error).message);
+        setWaking(e instanceof ApiError && e.unavailable);
+        next = RETRY_MS;
       } finally {
         setLoading(false);
       }
+      timer = setTimeout(() => {
+        if (document.visibilityState === 'visible') void load();
+      }, next);
     };
 
     void load();
-    const timer = setInterval(() => {
-      if (document.visibilityState === 'visible') void load();
-    }, REFRESH_MS);
     const onVisible = () => document.visibilityState === 'visible' && void load();
     document.addEventListener('visibilitychange', onVisible);
     return () => {
       ctrl.abort();
-      clearInterval(timer);
+      clearTimeout(timer);
       document.removeEventListener('visibilitychange', onVisible);
     };
   }, [stop.id]);
@@ -181,8 +192,19 @@ export function StopPanel({ stop, isFavorite, onToggleFavorite, onClose }: Props
       </div>
 
       <div className="panel-body">
-        {loading && !data && <p className="placeholder">Cargando próximos trenes…</p>}
-        {error && !data && <p className="placeholder error">{error}</p>}
+        {!data && (loading || waking) && (
+          <p className="placeholder">
+            {waking ? (
+              <>
+                <span className="spinner" aria-hidden="true" />
+                Despertando el servidor… puede tardar hasta un minuto. Se actualizará solo.
+              </>
+            ) : (
+              'Cargando próximos trenes…'
+            )}
+          </p>
+        )}
+        {error && !data && !waking && !loading && <p className="placeholder error">{error} · reintentando…</p>}
         {data && visible.length === 0 && <p className="placeholder">{emptyText}</p>}
         {data && visible.length > 0 && (
           <ul className="arrivals">

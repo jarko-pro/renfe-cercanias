@@ -3,11 +3,12 @@ import { useEffect, useMemo, useState } from 'react';
 import { MapView } from './components/MapView';
 import { StopPanel } from './components/StopPanel';
 import { StopSearch } from './components/StopSearch';
-import { fetchStops } from './lib/api';
+import { fetchStops, readCachedStops, writeCachedStops } from './lib/api';
 import { useFavorites } from './lib/favorites';
 
 export function App() {
-  const [stops, setStops] = useState<Stop[]>([]);
+  // Arranca con la copia guardada: el mapa y las favoritas funcionan aunque el servidor duerma.
+  const [stops, setStops] = useState<Stop[]>(() => readCachedStops() ?? []);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [selected, setSelected] = useState<Stop | null>(null);
   const [focus, setFocus] = useState<{ lat: number; lon: number; key: number } | null>(null);
@@ -16,13 +17,19 @@ export function App() {
   useEffect(() => {
     let cancelled = false;
     let retry: ReturnType<typeof setTimeout>;
+    // Esta petición también despierta al servidor si estaba dormido.
     const load = () =>
       fetchStops()
-        .then((s) => !cancelled && (setStops(s), setLoadError(null)))
+        .then((s) => {
+          if (cancelled) return;
+          setStops(s);
+          setLoadError(null);
+          writeCachedStops(s);
+        })
         .catch((e: Error) => {
           if (cancelled) return;
           setLoadError(e.message);
-          retry = setTimeout(load, 5000); // el servidor puede estar cargando el GTFS
+          retry = setTimeout(load, 3000);
         });
     load();
     return () => {
