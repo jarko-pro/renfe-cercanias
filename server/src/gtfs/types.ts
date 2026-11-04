@@ -1,0 +1,37 @@
+import type { Line, Stop } from '@renfe/shared';
+
+export interface StopTime {
+  tripId: string;
+  /** Segundos desde el inicio del día de servicio. */
+  arr: number;
+  dep: number;
+  seq: number;
+}
+
+export interface TripInfo {
+  routeId: string;
+  serviceId: string;
+  headsign: string;
+  lastStopId: string;
+}
+
+export interface GtfsData {
+  loadedAt: number;
+  /** Fecha local (YYYYMMDD) para la que se construyeron los índices. */
+  today: string;
+  stops: Map<string, Stop>;
+  /** route_id -> línea */
+  lines: Map<string, Line>;
+  /** Solo viajes con servicio activo ayer, hoy o mañana. */
+  trips: Map<string, TripInfo>;
+  /** Fecha YYYYMMDD -> servicios activos ese día. */
+  servicesByDate: Map<string, Set<string>>;
+  /** stop_id -> paso de trenes (solo viajes activos), ordenado por hora. */
+  stopTimesByStop: Map<string, StopTime[]>;
+}
+
+/** Fuente de filas CSV, desacoplada del zip para poder testear. */
+export interface GtfsSource {
+  has(file: string): boolean;
+  rows(file: string): AsyncIterable<Record<string, string>>;
+}

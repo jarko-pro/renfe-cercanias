@@ -1,0 +1,394 @@
+:root {
+  --brand: #8a0b3a;
+  --bg: #ffffff;
+  --surface: #ffffff;
+  --surface-2: #f4f4f6;
+  --text: #17171c;
+  --text-2: #5d5d6b;
+  --border: #e3e3e8;
+  --live: #0f8a4a;
+  --live-bg: #e3f6ec;
+  --late: #b45309;
+  --danger: #c0262d;
+  --danger-bg: #fdeaea;
+  --shadow: 0 6px 24px rgba(0, 0, 0, 0.14), 0 1px 3px rgba(0, 0, 0, 0.08);
+  --radius: 14px;
+  color-scheme: light;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #111114;
+    --surface: #1c1c21;
+    --surface-2: #26262d;
+    --text: #f1f1f4;
+    --text-2: #a3a3b0;
+    --border: #33333c;
+    --live: #4ade80;
+    --live-bg: #12301f;
+    --late: #fbbf24;
+    --danger: #f87171;
+    --danger-bg: #3a1618;
+    --shadow: 0 6px 24px rgba(0, 0, 0, 0.5);
+    color-scheme: dark;
+  }
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+.app,
+.map-wrap,
+.map {
+  position: relative;
+  height: 100%;
+  width: 100%;
+}
+
+/* ---------- Overlay (buscador + panel) ---------- */
+.overlay {
+  position: absolute;
+  z-index: 1000;
+  top: calc(12px + env(safe-area-inset-top));
+  left: 12px;
+  width: 380px;
+  max-height: calc(100% - 24px);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  pointer-events: none;
+}
+.overlay > * {
+  pointer-events: auto;
+}
+
+.search {
+  position: relative;
+}
+.search input {
+  width: 100%;
+  height: 48px;
+  padding: 0 16px;
+  font-size: 16px;
+  border: none;
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: var(--text);
+  box-shadow: var(--shadow);
+  outline: none;
+}
+.search input:focus-visible {
+  box-shadow: var(--shadow), 0 0 0 2px var(--brand);
+}
+.search-results {
+  position: absolute;
+  top: 54px;
+  left: 0;
+  right: 0;
+  margin: 0;
+  padding: 6px;
+  list-style: none;
+  background: var(--surface);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  max-height: 60vh;
+  overflow: auto;
+  z-index: 2;
+}
+.search-results li {
+  padding: 10px 12px;
+  border-radius: 10px;
+  cursor: pointer;
+}
+.search-results li.active,
+.search-results li:hover {
+  background: var(--surface-2);
+}
+.search-results .search-heading {
+  cursor: default;
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-2);
+  padding: 6px 12px 4px;
+}
+.search-results .search-heading:hover {
+  background: none;
+}
+.result-name {
+  font-weight: 600;
+}
+.result-meta,
+.panel-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-top: 4px;
+  font-size: 13px;
+  color: var(--text-2);
+}
+.chips {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.line-chip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 40px;
+  height: 28px;
+  padding: 0 8px;
+  border-radius: 8px;
+  font-weight: 700;
+  font-size: 14px;
+  white-space: nowrap;
+}
+.line-chip.small {
+  min-width: 26px;
+  height: 18px;
+  padding: 0 5px;
+  border-radius: 5px;
+  font-size: 11px;
+}
+
+/* ---------- Panel de llegadas ---------- */
+.panel {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  background: var(--surface);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  overflow: hidden;
+}
+.panel-header {
+  display: flex;
+  align-items: flex-start;
+  gap: 4px;
+  padding: 14px 10px 12px 16px;
+  border-bottom: 1px solid var(--border);
+}
+.panel-title {
+  flex: 1;
+  min-width: 0;
+}
+.panel-title h2 {
+  margin: 0;
+  font-size: 19px;
+  line-height: 1.25;
+}
+.icon-btn {
+  flex: none;
+  width: 36px;
+  height: 36px;
+  border: none;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--text-2);
+  font-size: 18px;
+  cursor: pointer;
+}
+.icon-btn:hover {
+  background: var(--surface-2);
+}
+.icon-btn.star {
+  font-size: 22px;
+}
+.icon-btn.star.on {
+  color: #e8a600;
+}
+
+.panel-body {
+  overflow: auto;
+  min-height: 0;
+}
+.placeholder {
+  margin: 0;
+  padding: 24px 16px;
+  color: var(--text-2);
+  text-align: center;
+}
+.placeholder.error {
+  color: var(--danger);
+}
+
+.arrivals {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.arrival {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--border);
+}
+.arrival:last-child {
+  border-bottom: none;
+}
+.arrival-main {
+  flex: 1;
+  min-width: 0;
+}
+.headsign {
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.arrival-sub {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 3px;
+  font-size: 13px;
+  color: var(--text-2);
+}
+.sched s {
+  opacity: 0.7;
+}
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 1px 7px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 600;
+  background: var(--surface-2);
+  color: var(--text-2);
+}
+.badge.live {
+  background: var(--live-bg);
+  color: var(--live);
+}
+.badge.danger {
+  background: var(--danger-bg);
+  color: var(--danger);
+}
+.badge .dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: currentColor;
+  animation: pulse 1.6s ease-in-out infinite;
+}
+@keyframes pulse {
+  50% {
+    opacity: 0.3;
+  }
+}
+.eta {
+  flex: none;
+  min-width: 52px;
+  text-align: right;
+  line-height: 1;
+}
+.eta strong {
+  display: block;
+  font-size: 26px;
+  font-variant-numeric: tabular-nums;
+}
+.eta span {
+  font-size: 12px;
+  color: var(--text-2);
+}
+.eta .now {
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--live);
+}
+.arrival.cancelled .headsign,
+.arrival.cancelled .sched {
+  text-decoration: line-through;
+  opacity: 0.6;
+}
+
+.panel-footer {
+  padding: 8px 16px;
+  font-size: 12px;
+  color: var(--text-2);
+  border-top: 1px solid var(--border);
+  background: var(--surface-2);
+}
+
+.toast {
+  padding: 10px 14px;
+  border-radius: 10px;
+  background: var(--surface);
+  box-shadow: var(--shadow);
+  font-size: 14px;
+  color: var(--text-2);
+}
+
+/* ---------- Botón de ubicación ---------- */
+.locate-btn {
+  position: absolute;
+  z-index: 1000;
+  right: 12px;
+  bottom: calc(28px + env(safe-area-inset-bottom));
+  width: 48px;
+  height: 48px;
+  border: none;
+  border-radius: 50%;
+  background: var(--surface);
+  color: var(--text);
+  box-shadow: var(--shadow);
+  cursor: pointer;
+  display: grid;
+  place-items: center;
+}
+.locate-btn.busy {
+  color: #2563eb;
+  animation: pulse 1s infinite;
+}
+.locate-btn.error {
+  color: var(--danger);
+}
+
+.leaflet-tooltip {
+  font-weight: 600;
+}
+
+/* ---------- Móvil: el panel es una hoja inferior ---------- */
+@media (max-width: 640px) {
+  .overlay {
+    left: 12px;
+    right: 12px;
+    width: auto;
+    max-height: none;
+  }
+  .panel {
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    max-height: 58vh;
+    border-radius: 18px 18px 0 0;
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+  .has-panel .locate-btn {
+    bottom: calc(58vh + 12px);
+  }
+}
