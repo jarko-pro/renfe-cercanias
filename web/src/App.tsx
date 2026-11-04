@@ -53,7 +53,9 @@ export function App() {
       />
       <div className="overlay">
         <StopSearch stops={stops} favorites={favoriteStops} onSelect={(s) => select(s, true)} />
-        {loadError && stops.length === 0 && <div className="toast">{loadError}</div>}
+        {loadError && stops.length === 0 && (
+          <div className="toast">Conectando con el servidor… la primera carga puede tardar hasta un minuto.</div>
+        )}
         {selected && (
           <StopPanel
             stop={selected}

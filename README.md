@@ -37,7 +37,13 @@ Datos abiertos de Renfe:
 
 El horario de Renfe tiene huecos conocidos, así que la app marca cada tren como "en tiempo real" o "programado".
 
+## Publicación
+
+- **Web**: GitHub Pages. Se despliega sola con `.github/workflows/pages.yml` en cada push a `main` que cambie `web/` o `shared/`.
+- **Servidor**: Render, plan gratuito, definido en `render.yaml`. En el plan gratuito se duerme tras 15 min sin uso y tarda ~1 min en despertar.
+- La web lee la URL del servidor de la variable de repositorio `API_URL` (Settings → Secrets and variables → Actions → Variables). Si la cambias, relanza el workflow.
+
 ## Próximos pasos
 
-- **Móvil**: en `web/` ejecutar `npm i @capacitor/core @capacitor/cli @capacitor/android @capacitor/ios`, después `npx cap init` (webDir `dist`) y `npx cap add android`. Desplegar el servidor y compilar con `VITE_API_URL=https://tu-api`.
+- **Móvil**: en `web/` ejecutar `npm i @capacitor/core @capacitor/cli @capacitor/android @capacitor/ios`, después `npx cap init` (webDir `dist`) y `npx cap add android`. Compilar con `VITE_API_URL` apuntando al servidor de Render.
 - **Favoritos con cuenta**: crear una implementación remota de `FavoritesStore` (API + auth).

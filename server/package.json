@@ -14,12 +14,12 @@
     "@renfe/shared": "*",
     "fastify": "^5.1.0",
     "gtfs-realtime-bindings": "^1.1.1",
+    "tsx": "^4.23.15",
     "yauzl": "^3.2.0"
   },
   "devDependencies": {
     "@types/node": "^22.10.0",
     "@types/yauzl": "^2.10.3",
-    "tsx": "^4.19.2",
     "typescript": "^5.7.2",
     "vitest": "^2.1.8"
   }
