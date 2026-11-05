@@ -1,4 +1,4 @@
-import type { Arrival, ArrivalsResponse, Stop } from '@renfe/shared';
+import type { Arrival, ArrivalsResponse, Stop, TripLive } from '@renfe/shared';
 import { useEffect, useMemo, useState } from 'react';
 import { ApiError, fetchArrivals, isAbort } from '../lib/api';
 import { formatTime } from '../lib/text';
@@ -15,6 +15,10 @@ interface Props {
   isFavorite: boolean;
   onToggleFavorite: () => void;
   onClose: () => void;
+  /** Tren que se sigue en el mapa; `live` es null mientras se localiza. */
+  tracked: { tripId: string; live: TripLive | null } | null;
+  /** Empieza a seguir un tren, o deja de seguirlo si ya se seguía (null = dejar de seguir). */
+  onTrack: (a: Arrival | null) => void;
 }
 
 /** Cada cuánto se recalcula la cuenta atrás en pantalla. */
@@ -37,51 +41,115 @@ function useNow(intervalMs: number): number {
   return now;
 }
 
-function ArrivalRow({ a, now }: { a: Arrival; now: number }) {
+/** Dónde está el tren seguido, en pocas palabras. */
+function whereText(live: TripLive | null | undefined): string {
+  if (!live) return 'Localizando el tren…';
+  // Renfe no publica algunos trenes (p. ej. antes de salir de origen): no se inventa el motivo.
+  if (!live.position) return 'Sin posición en directo';
+  if (!live.stopName) return 'En camino';
+  if (live.status === 'stopped') return `En ${live.stopName}`;
+  if (live.status === 'incoming') return `Llegando a ${live.stopName}`;
+  return `Hacia ${live.stopName}`;
+}
+
+interface RowProps {
+  a: Arrival;
+  now: number;
+  /** undefined = no se sigue este tren; null = se sigue pero aún no hay posición. */
+  live: TripLive | null | undefined;
+  onTrack: (a: Arrival) => void;
+}
+
+function ArrivalRow({ a, now, live, onTrack }: RowProps) {
   const delayMin = a.delaySec != null ? Math.round(a.delaySec / 60) : 0;
   const minutes = minutesUntil(a.estimated, now);
+  const following = live !== undefined;
+  // En cabeceras el tren espera en el andén varios minutos: ahí manda la cuenta atrás.
+  const atPlatform = a.vehicleStatus === 'at_platform';
+  const eta = a.cancelled
+    ? '—'
+    : atPlatform && minutes <= 1
+      ? 'En andén'
+      : a.vehicleStatus === 'arriving' && minutes <= 2
+        ? 'Entrando'
+        : minutes === 0
+          ? 'Ahora'
+          : null;
+  const platformText = a.platform
+    ? `${atPlatform ? 'En vía' : 'Vía'} ${a.platform}`
+    : atPlatform && eta == null
+      ? 'En andén'
+      : null;
+  // Dentro de un <button> solo vale contenido "en línea": spans con display por CSS.
   return (
-    <li className={`arrival${a.cancelled ? ' cancelled' : ''}`}>
-      <LineChip line={a.line} />
-      <div className="arrival-main">
-        <div className="headsign">{a.headsign || 'Destino desconocido'}</div>
-        <div className="arrival-sub">
-          {a.cancelled ? (
-            <span className="badge danger">Cancelado</span>
-          ) : a.realtime ? (
-            <span className="badge live" title="Dato en tiempo real">
-              <span className="dot" />
-              {delayMin > 0 ? `+${delayMin} min` : 'En hora'}
-            </span>
-          ) : (
-            <span className="badge muted" title="Sin datos en tiempo real: horario programado">
-              Programado
-            </span>
-          )}
-          <span className="sched">
-            {delayMin > 0 && !a.cancelled ? (
-              <>
-                <s>{formatTime(a.scheduled)}</s> {formatTime(a.estimated)}
-              </>
+    <li className="arrival-item">
+      <button
+        type="button"
+        className={`arrival${a.cancelled ? ' cancelled' : ''}${following ? ' following' : ''}`}
+        // Solo se pueden seguir los trenes de los que Renfe publica la posición.
+        disabled={a.cancelled || (!a.hasPosition && !following)}
+        aria-pressed={following}
+        title={
+          following ? 'Dejar de seguir este tren' : a.hasPosition ? 'Ver este tren en directo en el mapa' : undefined
+        }
+        onClick={() => onTrack(a)}
+      >
+        <LineChip line={a.line} />
+        <span className="arrival-main">
+          <span className="headsign">{a.headsign || 'Destino desconocido'}</span>
+          <span className="arrival-sub">
+            {a.cancelled ? (
+              <span className="badge danger">Cancelado</span>
+            ) : a.realtime ? (
+              <span className="badge live" title="Dato en tiempo real">
+                <span className="dot" />
+                {delayMin > 0 ? `+${delayMin} min` : 'En hora'}
+              </span>
             ) : (
-              formatTime(a.scheduled)
+              <span className="badge muted" title="Sin datos en tiempo real: horario programado">
+                Programado
+              </span>
+            )}
+            {following ? (
+              <span className="where">{whereText(live)}</span>
+            ) : (
+              <span className="sched">
+                {delayMin > 0 && !a.cancelled ? (
+                  <>
+                    <s>{formatTime(a.scheduled)}</s> {formatTime(a.estimated)}
+                  </>
+                ) : (
+                  formatTime(a.scheduled)
+                )}
+              </span>
+            )}
+            {platformText && !a.cancelled && <span className="badge platform">{platformText}</span>}
+            {(a.hasPosition || following) && !a.cancelled && (
+              <svg className="live-pin" viewBox="0 0 24 24" width="15" height="15" aria-label="Se puede ver en directo">
+                <path
+                  fill="currentColor"
+                  d="M12 2a7 7 0 0 0-7 7c0 5.2 7 13 7 13s7-7.8 7-13a7 7 0 0 0-7-7Zm0 9.5a2.5 2.5 0 1 1 0-5 2.5 2.5 0 0 1 0 5Z"
+                />
+              </svg>
             )}
           </span>
-        </div>
-      </div>
-      <div className="eta" aria-label={minutes === 0 ? 'Llegando ahora' : `${minutes} minutos`}>
-        {a.cancelled ? '—' : minutes === 0 ? <span className="now">Ahora</span> : (
-          <>
-            <strong>{minutes}</strong>
-            <span>min</span>
-          </>
-        )}
-      </div>
+        </span>
+        <span className="eta">
+          {eta != null ? (
+            <span className={a.cancelled ? undefined : 'now'}>{eta}</span>
+          ) : (
+            <>
+              <strong>{minutes}</strong>
+              <span>min</span>
+            </>
+          )}
+        </span>
+      </button>
     </li>
   );
 }
 
-export function StopPanel({ stop, isFavorite, onToggleFavorite, onClose }: Props) {
+export function StopPanel({ stop, isFavorite, onToggleFavorite, onClose, tracked, onTrack }: Props) {
   const [data, setData] = useState<ArrivalsResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -139,6 +207,12 @@ export function StopPanel({ stop, isFavorite, onToggleFavorite, onClose }: Props
     () => (data?.arrivals ?? []).filter((a) => a.estimated >= now - HIDE_AFTER_MS),
     [data, now],
   );
+  // Si el tren seguido ya ha pasado y sale de la lista, se deja de seguir.
+  const trackedGone = !!tracked && !!data && !all.some((a) => a.tripId === tracked.tripId);
+  useEffect(() => {
+    if (trackedGone) onTrack(null);
+  }, [trackedGone, onTrack]);
+
   const byLine = useMemo(
     () => (lineFilter.length ? all.filter((a) => lineFilter.includes(a.line.name)) : all),
     [all, lineFilter],
@@ -235,7 +309,13 @@ export function StopPanel({ stop, isFavorite, onToggleFavorite, onClose }: Props
         {data && visible.length > 0 && (
           <ul className="arrivals">
             {visible.map((a) => (
-              <ArrivalRow key={`${a.tripId}-${a.scheduled}`} a={a} now={now} />
+              <ArrivalRow
+                key={`${a.tripId}-${a.scheduled}`}
+                a={a}
+                now={now}
+                live={tracked?.tripId === a.tripId ? tracked.live : undefined}
+                onTrack={onTrack}
+              />
             ))}
           </ul>
         )}

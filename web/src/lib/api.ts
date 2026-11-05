@@ -1,4 +1,4 @@
-import type { ArrivalsResponse, Stop } from '@renfe/shared';
+import type { ArrivalsResponse, Stop, TripLive, TripShape } from '@renfe/shared';
 
 /** Vacío en desarrollo (proxy de Vite). En Capacitor/producción: URL pública del backend. */
 const BASE = (import.meta.env.VITE_API_URL ?? '').replace(/\/$/, '');
@@ -48,6 +48,12 @@ export const fetchStops = (signal?: AbortSignal) => get<Stop[]>('/api/stops', si
 
 export const fetchArrivals = (stopId: string, signal?: AbortSignal) =>
   get<ArrivalsResponse>(`/api/stops/${encodeURIComponent(stopId)}/arrivals`, signal);
+
+export const fetchTripLive = (tripId: string, signal?: AbortSignal) =>
+  get<TripLive>(`/api/trips/${encodeURIComponent(tripId)}/live`, signal);
+
+export const fetchTripShape = (tripId: string, signal?: AbortSignal) =>
+  get<TripShape>(`/api/trips/${encodeURIComponent(tripId)}/shape`, signal);
 
 // ---- Caché local de estaciones: cambian muy poco, así el mapa sale al instante ----
 

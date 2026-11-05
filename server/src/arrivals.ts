@@ -1,6 +1,7 @@
 import type { Arrival } from '@renfe/shared';
 import type { GtfsData } from './gtfs/types.js';
 import type { RealtimeState, StopUpdate, TripRealtime } from './realtime/poller.js';
+import type { VehicleState } from './realtime/vehicles.js';
 import { addDays, localDate, serviceDayBase } from './time.js';
 
 /** Mismo criterio que la web: 0 ("Ahora") a menos de 30 s; si no, minutos redondeados. */
@@ -23,7 +24,7 @@ export interface ArrivalsOptions {
  */
 export function getArrivals(
   data: GtfsData,
-  realtime: Pick<RealtimeState, 'trips'>,
+  realtime: Pick<RealtimeState, 'trips'> & { vehicles?: Map<string, VehicleState> },
   stopId: string,
   nowMs: number,
   { windowMin = 90, limit = 12, graceSec = 30 }: ArrivalsOptions = {},
@@ -52,8 +53,17 @@ export function getArrivals(
       const rtStop = rtTrip?.stops.get(stopId);
       const delaySec = rtTrip ? realtimeDelaySec(data, st.tripId, stopId, base, rtTrip) : null;
       const estimated = delaySec != null ? scheduled + delaySec * 1000 : scheduled;
-      // Un tren que ya ha pasado tiene hora estimada en el pasado y se descarta aquí.
-      if (estimated < fromMs || estimated > toMs) continue;
+
+      // Posición real del tren. Solo se mira para la circulación de hoy (no la de ayer/mañana
+      // con el mismo trip_id), que es la que puede estar en el feed.
+      const vehicle = Math.abs(scheduled - nowMs) < 4 * 3600_000 ? realtime.vehicles?.get(st.tripId) : undefined;
+      const pos = vehicle ? vehiclePosition(data, st.tripId, stopId, st.seq, vehicle) : null;
+      // Ya está más allá de nuestra parada: ha pasado aunque la estimación diga otra cosa.
+      if (pos === 'passed') continue;
+      // Un tren que ya ha pasado tiene hora estimada en el pasado y se descarta aquí,
+      // salvo que siga entrando o parado en la estación.
+      if (!pos && (estimated < fromMs || estimated > toMs)) continue;
+      if (pos && estimated > toMs) continue;
 
       const line = data.lines.get(trip.routeId) ?? { name: '?', color: '7A7A7A', textColor: 'FFFFFF' };
       out.push({
@@ -67,12 +77,35 @@ export function getArrivals(
         realtime: rtTrip != null,
         cancelled: !!rtTrip?.cancelled || !!rtStop?.skipped,
         terminates: trip.lastStopId === stopId,
+        hasPosition: vehicle?.lat != null && vehicle.lon != null,
+        ...(pos ? { vehicleStatus: pos } : {}),
+        ...(pos && vehicle?.platform ? { platform: vehicle.platform } : {}),
       });
     }
   }
 
   out.sort((a, b) => a.estimated - b.estimated);
   return out.slice(0, limit);
+}
+
+/**
+ * Dónde está el tren respecto a nuestra parada: entrando, parado en ella, ya pasado o
+ * (null) todavía de camino / sin datos útiles.
+ */
+function vehiclePosition(
+  data: GtfsData,
+  tripId: string,
+  stopId: string,
+  ourSeq: number,
+  v: VehicleState,
+): 'arriving' | 'at_platform' | 'passed' | null {
+  if (v.stopId === stopId) {
+    if (v.status === 'stopped') return 'at_platform';
+    if (v.status === 'incoming') return 'arriving';
+    return null;
+  }
+  const vSeq = data.stopTimesByStop.get(v.stopId)?.find((s) => s.tripId === tripId)?.seq;
+  return vSeq != null && vSeq > ourSeq ? 'passed' : null;
 }
 
 /**

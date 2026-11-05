@@ -397,14 +397,13 @@ body {
   padding: 12px 16px;
   border-bottom: 1px solid var(--border);
 }
-.arrival:last-child {
-  border-bottom: none;
-}
 .arrival-main {
+  display: block;
   flex: 1;
   min-width: 0;
 }
 .headsign {
+  display: block;
   font-weight: 600;
   white-space: nowrap;
   overflow: hidden;
@@ -594,5 +593,93 @@ body {
   }
   .has-panel .locate-btn {
     bottom: calc(58vh + 12px);
+  }
+}
+
+/* ---------- Tren seguido ---------- */
+.arrival-item:last-child .arrival {
+  border-bottom: none;
+}
+button.arrival {
+  width: 100%;
+  margin: 0;
+  border: none;
+  border-bottom: 1px solid var(--border);
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+button.arrival:hover:not(:disabled) {
+  background: var(--surface-2);
+}
+button.arrival:disabled {
+  cursor: default;
+  opacity: 1; /* no atenuar: un tren sin posición sigue siendo un tren normal */
+}
+/* Icono "se puede ver en directo": discreto en reposo, verde y latiendo al seguirlo. */
+.live-pin {
+  flex: none;
+  color: var(--text-2);
+  opacity: 0.75;
+}
+button.arrival:hover:not(:disabled) .live-pin {
+  color: var(--live);
+  opacity: 1;
+}
+button.arrival.following .live-pin {
+  color: var(--live);
+  opacity: 1;
+  animation: pulse 1.6s ease-in-out infinite;
+}
+button.arrival:focus-visible {
+  outline: 2px solid var(--brand);
+  outline-offset: -2px;
+}
+button.arrival.following {
+  background: var(--live-bg);
+  box-shadow: inset 3px 0 0 var(--live);
+}
+.where {
+  color: var(--live);
+  font-weight: 600;
+}
+.badge.platform {
+  background: var(--surface-2);
+  color: var(--text);
+}
+.train-marker span {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  background: var(--line);
+  border: 2.5px solid #fff;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.45);
+}
+.train-marker span::after {
+  content: '';
+  position: absolute;
+  inset: -2.5px;
+  border-radius: 50%;
+  border: 3px solid var(--line);
+  animation: train-ring 1.8s ease-out infinite;
+}
+@keyframes train-ring {
+  from {
+    transform: scale(1);
+    opacity: 0.8;
+  }
+  to {
+    transform: scale(1.9);
+    opacity: 0;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .train-marker span::after {
+    animation: none;
   }
 }

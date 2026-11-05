@@ -3,6 +3,7 @@ import { getArrivals, minutesUntil } from '../src/arrivals.js';
 import { buildGtfsData } from '../src/gtfs/build.js';
 import type { GtfsSource } from '../src/gtfs/types.js';
 import type { TripRealtime } from '../src/realtime/poller.js';
+import type { VehicleState } from '../src/realtime/vehicles.js';
 import { serviceDayBase } from '../src/time.js';
 
 const TODAY = '20261104'; // miércoles
@@ -93,6 +94,7 @@ describe('getArrivals', () => {
     expect(res[0].minutes).toBe(10);
     expect(res[0].realtime).toBe(false);
     expect(res[0].line.name).toBe('C1');
+    expect(res[0].hasPosition).toBe(false);
     expect(res[1].terminates).toBe(true);
   });
 
@@ -163,6 +165,55 @@ describe('getArrivals', () => {
     const rt = { trips: new Map<string, TripRealtime>([['B', { cancelled: true, stops: new Map() }]]) };
     const res = getArrivals(data, rt, 'S2', at(TODAY, 8, 0));
     expect(res.find((a) => a.tripId === 'B')!.cancelled).toBe(true);
+  });
+
+  describe('posición real del tren', () => {
+    const veh = (stopId: string, status: VehicleState['status'], platform?: string): VehicleState => ({
+      lat: 40,
+      lon: -3,
+      stopId,
+      status,
+      platform,
+      timestamp: null,
+    });
+    const withVeh = (v: VehicleState) => ({ trips: new Map<string, TripRealtime>(), vehicles: new Map([['A', v]]) });
+
+    it('marca el tren parado en la estación con su vía, aunque su hora ya haya pasado', async () => {
+      const data = await buildGtfsData(source(FILES), TODAY);
+      const [a] = getArrivals(data, withVeh(veh('S2', 'stopped', '3')), 'S2', at(TODAY, 8, 12));
+      expect(a.tripId).toBe('A');
+      expect(a.vehicleStatus).toBe('at_platform');
+      expect(a.platform).toBe('3');
+      expect(a.minutes).toBe(0);
+      expect(a.hasPosition).toBe(true);
+    });
+
+    it('marca el tren que está entrando', async () => {
+      const data = await buildGtfsData(source(FILES), TODAY);
+      const [a] = getArrivals(data, withVeh(veh('S2', 'incoming')), 'S2', at(TODAY, 8, 9));
+      expect(a.vehicleStatus).toBe('arriving');
+      expect(a.platform).toBeUndefined();
+    });
+
+    it('no marca nada si el tren solo va de camino a la estación', async () => {
+      const data = await buildGtfsData(source(FILES), TODAY);
+      const [a] = getArrivals(data, withVeh(veh('S2', 'in_transit', '3')), 'S2', at(TODAY, 8, 5));
+      expect(a.vehicleStatus).toBeUndefined();
+      expect(a.platform).toBeUndefined();
+    });
+
+    it('descarta el tren que ya está en una parada posterior aunque la estimación diga que no ha llegado', async () => {
+      const data = await buildGtfsData(source(FILES), TODAY);
+      const res = getArrivals(data, withVeh(veh('S3', 'incoming')), 'S2', at(TODAY, 8, 9));
+      expect(res.find((a) => a.tripId === 'A')).toBeUndefined();
+    });
+
+    it('en origen no descarta el tren que aún no ha salido', async () => {
+      const data = await buildGtfsData(source(FILES), TODAY);
+      const [a] = getArrivals(data, withVeh(veh('S1', 'stopped', '1')), 'S1', at(TODAY, 7, 55));
+      expect(a.tripId).toBe('A');
+      expect(a.vehicleStatus).toBe('at_platform');
+    });
   });
 
   it('descarta trenes ya pasados y fuera de la ventana', async () => {

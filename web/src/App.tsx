@@ -1,11 +1,13 @@
-import type { Stop } from '@renfe/shared';
+import type { Line, Stop } from '@renfe/shared';
 import { useEffect, useMemo, useState } from 'react';
 import { InstallHint } from './components/InstallHint';
 import { MapView } from './components/MapView';
 import { StopPanel } from './components/StopPanel';
 import { StopSearch } from './components/StopSearch';
 import { fetchStops, readCachedStops, writeCachedStops } from './lib/api';
+import { track } from './lib/analytics';
 import { useFavorites } from './lib/favorites';
+import { useTripLive, useTripShape } from './lib/useTripLive';
 
 export function App() {
   // Arranca con la copia guardada: el mapa y las favoritas funcionan aunque el servidor duerma.
@@ -14,6 +16,10 @@ export function App() {
   const [selected, setSelected] = useState<Stop | null>(null);
   const [focus, setFocus] = useState<{ lat: number; lon: number; key: number } | null>(null);
   const favorites = useFavorites();
+  // Tren que se sigue en el mapa (solo uno, y solo mientras el panel de su estación está abierto).
+  const [tracked, setTracked] = useState<{ tripId: string; line: Line } | null>(null);
+  const live = useTripLive(tracked?.tripId ?? null);
+  const routePath = useTripShape(tracked?.tripId ?? null);
 
   useEffect(() => {
     let cancelled = false;
@@ -46,6 +52,11 @@ export function App() {
   );
 
   const select = (s: Stop, fly: boolean) => {
+    if (s.id !== selected?.id) {
+      setTracked(null);
+      // `fly` = elegida en el buscador o en favoritas; si no, tocando el mapa.
+      track('estacion', { estacion: s.name, red: s.network, desde: fly ? 'buscador' : 'mapa' });
+    }
     setSelected(s);
     if (fly) setFocus({ lat: s.lat, lon: s.lon, key: Date.now() });
   };
@@ -58,6 +69,12 @@ export function App() {
         favoriteIds={favorites.ids}
         focus={focus}
         onSelect={(s) => select(s, false)}
+        train={
+          tracked && live?.tripId === tracked.tripId && live.position
+            ? { tripId: tracked.tripId, ...live.position, color: tracked.line.color }
+            : null
+        }
+        route={tracked && routePath.length > 1 ? { path: routePath, color: tracked.line.color } : null}
       />
       <div className="overlay">
         <StopSearch stops={stops} favorites={favoriteStops} onSelect={(s) => select(s, true)} />
@@ -69,8 +86,20 @@ export function App() {
           <StopPanel
             stop={selected}
             isFavorite={favorites.isFavorite(selected.id)}
-            onToggleFavorite={() => favorites.toggle(selected.id)}
-            onClose={() => setSelected(null)}
+            onToggleFavorite={() => {
+              if (!favorites.isFavorite(selected.id)) track('favorita', { estacion: selected.name });
+              favorites.toggle(selected.id);
+            }}
+            onClose={() => {
+              setSelected(null);
+              setTracked(null);
+            }}
+            tracked={tracked ? { tripId: tracked.tripId, live: live?.tripId === tracked.tripId ? live : null } : null}
+            onTrack={(a) => {
+              const start = !!a && a.tripId !== tracked?.tripId;
+              if (start) track('seguir-tren', { linea: a.line.name, estacion: selected.name });
+              setTracked(start ? { tripId: a.tripId, line: a.line } : null);
+            }}
           />
         )}
       </div>

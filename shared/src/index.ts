@@ -36,6 +36,29 @@ export interface Arrival {
   cancelled: boolean;
   /** El tren termina su recorrido en esta parada. */
   terminates: boolean;
+  /** Posición real del tren respecto a esta parada (solo si está entrando o parado en ella). */
+  vehicleStatus?: 'arriving' | 'at_platform';
+  /** Andén o vía en esta parada, si Renfe lo publica. */
+  platform?: string;
+  /** Renfe está publicando la posición de este tren: se puede seguir en el mapa. */
+  hasPosition: boolean;
+}
+
+/** Dónde está ahora un tren concreto (para seguirlo en el mapa). */
+export interface TripLive {
+  tripId: string;
+  line: Line;
+  headsign: string;
+  /** null si el tren aún no aparece en el feed (no ha salido de origen). */
+  position: { lat: number; lon: number } | null;
+  /** Respecto a `stopId`: entrando, parado en ella o de camino a ella. */
+  status: 'incoming' | 'stopped' | 'in_transit' | null;
+  stopId: string | null;
+  stopName: string | null;
+  platform?: string;
+  delaySec: number | null;
+  /** Hora de la posición (epoch ms). */
+  updatedAt: number | null;
 }
 
 export interface ArrivalsResponse {
@@ -45,11 +68,18 @@ export interface ArrivalsResponse {
   arrivals: Arrival[];
 }
 
+/** Trazado de un viaje de origen a destino, en su sentido. Vacío si Renfe no lo publica. */
+export interface TripShape {
+  tripId: string;
+  path: [number, number][];
+}
+
 export interface HealthResponse {
   ok: boolean;
   gtfsLoadedAt: number | null;
   gtfsStops: number;
   realtimeFetchedAt: number | null;
   realtimeTrips: number;
+  vehicles: number;
   error?: string;
 }

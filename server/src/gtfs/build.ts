@@ -51,7 +51,9 @@ export async function buildGtfsData(src: GtfsSource, today: string): Promise<Gtf
         routeId: r.route_id,
         serviceId: r.service_id,
         headsign: r.trip_headsign ?? '',
+        firstStopId: '',
         lastStopId: '',
+        shapeId: r.shape_id ?? '',
       });
     }
   }
@@ -65,6 +67,7 @@ export async function buildGtfsData(src: GtfsSource, today: string): Promise<Gtf
   const routesByStop = new Map<string, Set<string>>();
   const stopTimesByStop = new Map<string, StopTime[]>();
   const lastSeq = new Map<string, number>();
+  const firstSeq = new Map<string, number>();
   for await (const r of src.rows('stop_times.txt')) {
     const stopId = r.stop_id;
     if (!rawStops.has(stopId)) continue;
@@ -85,6 +88,10 @@ export async function buildGtfsData(src: GtfsSource, today: string): Promise<Gtf
     if (seq > (lastSeq.get(r.trip_id) ?? -1)) {
       lastSeq.set(r.trip_id, seq);
       trip.lastStopId = stopId;
+    }
+    if (seq < (firstSeq.get(r.trip_id) ?? Infinity)) {
+      firstSeq.set(r.trip_id, seq);
+      trip.firstStopId = stopId;
     }
   }
   for (const list of stopTimesByStop.values()) list.sort((a, b) => a.arr - b.arr);
@@ -111,5 +118,28 @@ export async function buildGtfsData(src: GtfsSource, today: string): Promise<Gtf
     stops.set(id, { id, name: s.name, lat: s.lat, lon: s.lon, network, lines: sortedLines });
   }
 
-  return { loadedAt: Date.now(), today, stops, lines, trips, servicesByDate, stopTimesByStop };
+  // Trazados: solo los que usan los viajes activos.
+  const usedShapes = new Set<string>();
+  for (const t of trips.values()) if (t.shapeId) usedShapes.add(t.shapeId);
+  const rawShapes = new Map<string, { seq: number; lat: number; lon: number }[]>();
+  if (src.has('shapes.txt')) {
+    for await (const r of src.rows('shapes.txt')) {
+      if (!usedShapes.has(r.shape_id)) continue;
+      let pts = rawShapes.get(r.shape_id);
+      if (!pts) rawShapes.set(r.shape_id, (pts = []));
+      pts.push({ seq: parseInt(r.shape_pt_sequence, 10), lat: +r.shape_pt_lat, lon: +r.shape_pt_lon });
+    }
+  }
+  const shapes = new Map<string, Float64Array>();
+  for (const [id, pts] of rawShapes) {
+    pts.sort((a, b) => a.seq - b.seq);
+    const packed = new Float64Array(pts.length * 2);
+    pts.forEach((p, i) => {
+      packed[i * 2] = p.lat;
+      packed[i * 2 + 1] = p.lon;
+    });
+    shapes.set(id, packed);
+  }
+
+  return { loadedAt: Date.now(), today, stops, lines, trips, servicesByDate, stopTimesByStop, shapes };
 }

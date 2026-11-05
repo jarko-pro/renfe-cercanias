@@ -29,6 +29,8 @@ jobs:
         env:
           # URL pública del servidor (Settings > Secrets and variables > Actions > Variables)
           VITE_API_URL: ${{ vars.API_URL }}
+          # ID de la web en Umami Cloud (estadísticas). Si no está, no se carga nada.
+          VITE_UMAMI_ID: ${{ vars.UMAMI_ID }}
       - uses: actions/upload-pages-artifact@v3
         with:
           path: web/dist

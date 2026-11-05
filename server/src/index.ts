@@ -1,18 +1,22 @@
 import { createHash } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import cors from '@fastify/cors';
-import type { ArrivalsResponse, HealthResponse, Stop } from '@renfe/shared';
+import type { ArrivalsResponse, HealthResponse, Stop, TripLive, TripShape } from '@renfe/shared';
 import Fastify from 'fastify';
 import { getArrivals } from './arrivals.js';
 import { downloadGtfs, loadGtfs } from './gtfs/loader.js';
 import type { GtfsData } from './gtfs/types.js';
 import { createRealtimePoller } from './realtime/poller.js';
+import { createVehiclePoller } from './realtime/vehicles.js';
+import { tripPath } from './shape.js';
 import { localDate } from './time.js';
 
 const PORT = Number(process.env.PORT ?? 3001);
 const ZIP_PATH = fileURLToPath(new URL('../data/fomento_transit.zip', import.meta.url));
 const GTFS_MAX_AGE_MS = 12 * 3600_000;
 const RT_INTERVAL_MS = 30_000;
+/** Renfe regenera las posiciones cada ~30 s: pedirlas más a menudo no aporta nada. */
+const VP_INTERVAL_MS = 30_000;
 
 const app = Fastify({ logger: { level: process.env.LOG_LEVEL ?? 'info' } });
 await app.register(cors, { origin: true });
@@ -47,6 +51,8 @@ async function refreshGtfs() {
 }
 
 const realtime = createRealtimePoller(RT_INTERVAL_MS, (m) => app.log.warn(m));
+// Una sola descarga cada 30 s para todos los usuarios: seguir un tren solo lee de memoria.
+const positions = createVehiclePoller(VP_INTERVAL_MS, (m) => app.log.warn(m));
 
 // Render (plan gratuito) duerme el servidor tras 15 min sin tráfico entrante. Llamar a
 // nuestra propia URL pública sale a internet y vuelve a entrar por Render, así que cuenta
@@ -72,6 +78,7 @@ app.get('/api/health', { logLevel: 'warn' }, async (): Promise<HealthResponse> =
   gtfsStops: gtfs?.stops.size ?? 0,
   realtimeFetchedAt: realtime.state.fetchedAt,
   realtimeTrips: realtime.state.trips.size,
+  vehicles: positions.state.vehicles.size,
   ...(gtfsError ? { error: gtfsError } : {}),
 }));
 
@@ -92,9 +99,48 @@ app.get<{ Params: { id: string } }>('/api/stops/:id/arrivals', async (req, reply
     generatedAt: now,
     realtimeAgeSec: realtime.state.fetchedAt ? Math.round((now - realtime.state.fetchedAt) / 1000) : null,
     // Se devuelven todos los de la ventana: la app separa salidas/llegadas y filtra por línea.
-    arrivals: getArrivals(gtfs, realtime.state, stop.id, now, { limit: 60 }),
+    arrivals: getArrivals(
+      gtfs,
+      { trips: realtime.state.trips, vehicles: positions.state.vehicles },
+      stop.id,
+      now,
+      { limit: 60 },
+    ),
   };
   reply.header('Cache-Control', 'no-store');
+  return res;
+});
+
+app.get<{ Params: { tripId: string } }>('/api/trips/:tripId/live', async (req, reply) => {
+  if (!gtfs) return reply.code(503).send({ error: 'Cargando datos de Renfe, prueba en unos segundos' });
+  const { tripId } = req.params;
+  const trip = gtfs.trips.get(tripId);
+  if (!trip) return reply.code(404).send({ error: 'Tren no encontrado' });
+  const v = positions.state.vehicles.get(tripId);
+  const rtTrip = realtime.state.trips.get(tripId);
+  const res: TripLive = {
+    tripId,
+    line: gtfs.lines.get(trip.routeId) ?? { name: '?', color: '7A7A7A', textColor: 'FFFFFF' },
+    headsign: trip.headsign,
+    position: v?.lat != null && v.lon != null ? { lat: v.lat, lon: v.lon } : null,
+    status: v?.status ?? null,
+    stopId: v?.stopId || null,
+    stopName: (v?.stopId && gtfs.stops.get(v.stopId)?.name) || null,
+    ...(v?.platform ? { platform: v.platform } : {}),
+    delaySec: rtTrip?.delaySec ?? null,
+    updatedAt: v?.timestamp ?? null,
+  };
+  reply.header('Cache-Control', 'no-store');
+  return res;
+});
+
+// Trazado del viaje: no cambia en el día, así que la web lo pide una vez y se puede cachear.
+app.get<{ Params: { tripId: string } }>('/api/trips/:tripId/shape', async (req, reply) => {
+  if (!gtfs) return reply.code(503).send({ error: 'Cargando datos de Renfe, prueba en unos segundos' });
+  const { tripId } = req.params;
+  if (!gtfs.trips.has(tripId)) return reply.code(404).send({ error: 'Tren no encontrado' });
+  const res: TripShape = { tripId, path: tripPath(gtfs, tripId) ?? [] };
+  reply.header('Cache-Control', 'public, max-age=3600');
   return res;
 });
 

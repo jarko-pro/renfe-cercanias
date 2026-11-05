@@ -12,7 +12,10 @@ export interface TripInfo {
   routeId: string;
   serviceId: string;
   headsign: string;
+  firstStopId: string;
   lastStopId: string;
+  /** Trazado de la línea en `GtfsData.shapes` ('' si Renfe no lo da). */
+  shapeId: string;
 }
 
 export interface GtfsData {
@@ -28,6 +31,8 @@ export interface GtfsData {
   servicesByDate: Map<string, Set<string>>;
   /** stop_id -> paso de trenes (solo viajes activos), ordenado por hora. */
   stopTimesByStop: Map<string, StopTime[]>;
+  /** shape_id -> puntos del trazado empaquetados [lat0, lon0, lat1, lon1, ...]. */
+  shapes: Map<string, Float64Array>;
 }
 
 /** Fuente de filas CSV, desacoplada del zip para poder testear. */
