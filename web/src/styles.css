@@ -11,6 +11,8 @@
   --late: #b45309;
   --danger: #c0262d;
   --danger-bg: #fdeaea;
+  --warn: #a15c07;
+  --warn-bg: #fdf3dc;
   --shadow: 0 6px 24px rgba(0, 0, 0, 0.14), 0 1px 3px rgba(0, 0, 0, 0.08);
   --radius: 14px;
   color-scheme: light;
@@ -29,6 +31,8 @@
     --late: #fbbf24;
     --danger: #f87171;
     --danger-bg: #3a1618;
+    --warn: #fbbf24;
+    --warn-bg: #33270d;
     --shadow: 0 6px 24px rgba(0, 0, 0, 0.5);
     color-scheme: dark;
   }
@@ -682,4 +686,73 @@ button.arrival.following {
   .train-marker span::after {
     animation: none;
   }
+}
+
+/* ---------- Avisos de Renfe ---------- */
+.alerts-toggle {
+  padding: 1px 8px;
+  border: none;
+  border-radius: 999px;
+  background: var(--warn-bg);
+  color: var(--warn);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.alerts-toggle.on {
+  box-shadow: inset 0 0 0 1.5px var(--warn);
+}
+.alert-banner {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 7px 16px;
+  border: none;
+  border-bottom: 1px solid var(--border);
+  background: var(--warn-bg);
+  color: var(--warn);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  text-align: left;
+  cursor: pointer;
+}
+.alert-banner-text {
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.alerts {
+  list-style: none;
+  margin: 0;
+  padding: 4px 0;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface-2);
+}
+.alert {
+  display: flex;
+  gap: 10px;
+  padding: 8px 16px;
+  font-size: 13px;
+  line-height: 1.4;
+}
+.alert-icon {
+  flex: none;
+  color: var(--warn);
+}
+.alert.severe .alert-body {
+  font-weight: 600;
+}
+.alert-lines {
+  display: inline-flex;
+  gap: 4px;
+  margin-right: 6px;
+  vertical-align: 1px;
+}
+.alert a {
+  color: inherit;
+  font-weight: 600;
 }

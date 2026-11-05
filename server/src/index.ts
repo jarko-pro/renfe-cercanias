@@ -3,10 +3,12 @@ import { fileURLToPath } from 'node:url';
 import cors from '@fastify/cors';
 import type { ArrivalsResponse, HealthResponse, Stop, TripShape } from '@renfe/shared';
 import Fastify from 'fastify';
+import { alertsForStop } from './alerts.js';
 import { getArrivals } from './arrivals.js';
 import { downloadGtfs, loadGtfs } from './gtfs/loader.js';
 import type { GtfsData } from './gtfs/types.js';
 import { buildTripLive } from './live.js';
+import { createAlertsPoller } from './realtime/alerts.js';
 import { createRealtimePoller } from './realtime/poller.js';
 import { createVehiclePoller } from './realtime/vehicles.js';
 import { tripPath } from './shape.js';
@@ -56,6 +58,8 @@ async function refreshGtfs() {
 const realtime = createRealtimePoller(RT_INTERVAL_MS, (m) => app.log.warn(m));
 // Una sola descarga cada 30 s para todos los usuarios: seguir un tren solo lee de memoria.
 const positions = createVehiclePoller(VP_INTERVAL_MS, (m) => app.log.warn(m));
+// Los avisos cambian poco: cada 2 min basta.
+const alerts = createAlertsPoller(2 * 60_000, (m) => app.log.warn(m));
 
 // Render (plan gratuito) duerme el servidor tras 15 min sin tráfico entrante. Llamar a
 // nuestra propia URL pública sale a internet y vuelve a entrar por Render, así que cuenta
@@ -82,6 +86,7 @@ app.get('/api/health', { logLevel: 'warn' }, async (): Promise<HealthResponse> =
   realtimeFetchedAt: realtime.state.fetchedAt,
   realtimeTrips: realtime.state.trips.size,
   vehicles: positions.state.vehicles.size,
+  alerts: alerts.state.alerts.length,
   ...(gtfsError ? { error: gtfsError } : {}),
 }));
 
@@ -109,6 +114,7 @@ app.get<{ Params: { id: string } }>('/api/stops/:id/arrivals', async (req, reply
       now,
       { limit: 60 },
     ),
+    alerts: alertsForStop(gtfs, alerts.state.alerts, stop.id),
   };
   reply.header('Cache-Control', 'no-store');
   return res;

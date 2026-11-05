@@ -1,4 +1,4 @@
-import type { Arrival, ArrivalsResponse, Stop, TripLive } from '@renfe/shared';
+import type { Arrival, ArrivalsResponse, Stop, StopAlert, TripLive } from '@renfe/shared';
 import { useEffect, useMemo, useState } from 'react';
 import { ApiError, fetchArrivals, isAbort } from '../lib/api';
 import { formatTime } from '../lib/text';
@@ -39,6 +39,57 @@ function useNow(intervalMs: number): number {
     return () => clearInterval(id);
   }, [intervalMs]);
   return now;
+}
+
+/** "https://www.renfe.com/es/..." → "renfe.com": las URL completas no caben en el panel. */
+function linkLabel(url: string): string {
+  try {
+    return new URL(url).hostname.replace(/^(www|grupo)\./, '');
+  } catch {
+    return 'enlace';
+  }
+}
+
+/** Texto con los enlaces (https://...) clicables. */
+function Linkified({ text }: { text: string }) {
+  const parts = text.split(/(https?:\/\/[^\s]+[^\s.,;:)])/g);
+  return (
+    <>
+      {parts.map((p, i) =>
+        i % 2 ? (
+          <a key={i} href={p} target="_blank" rel="noopener noreferrer">
+            {linkLabel(p)} ↗
+          </a>
+        ) : (
+          p
+        ),
+      )}
+    </>
+  );
+}
+
+function AlertList({ alerts }: { alerts: StopAlert[] }) {
+  return (
+    <ul className="alerts">
+      {alerts.map((a) => (
+        <li key={a.id} className={`alert${a.severe ? ' severe' : ''}`}>
+          <span className="alert-icon" aria-hidden="true">
+            {a.kind === 'access' ? '♿' : '⚠'}
+          </span>
+          <span className="alert-body">
+            {a.lines.length > 0 && (
+              <span className="alert-lines">
+                {a.lines.map((l) => (
+                  <LineChip key={l.name} line={l} small />
+                ))}
+              </span>
+            )}
+            <Linkified text={a.text} />
+          </span>
+        </li>
+      ))}
+    </ul>
+  );
 }
 
 /** Dónde está el tren seguido, en pocas palabras. */
@@ -157,6 +208,7 @@ export function StopPanel({ stop, isFavorite, onToggleFavorite, onClose, tracked
   const [waking, setWaking] = useState(false);
   const [tab, setTab] = useState<Tab>('departures');
   const [lineFilter, setLineFilter] = useState<string[]>([]);
+  const [showAlerts, setShowAlerts] = useState(false);
 
   useEffect(() => {
     setData(null);
@@ -164,6 +216,7 @@ export function StopPanel({ stop, isFavorite, onToggleFavorite, onClose, tracked
     setLoading(true);
     setTab('departures');
     setLineFilter([]);
+    setShowAlerts(false);
     let ctrl = new AbortController();
     let timer: ReturnType<typeof setTimeout> | undefined;
 
@@ -224,6 +277,11 @@ export function StopPanel({ stop, isFavorite, onToggleFavorite, onClose, tracked
   const showTabs = all.some((a) => a.terminates);
   const visible = (showTabs && tab === 'arrivals' ? arrivals : showTabs ? departures : byLine).slice(0, MAX_ROWS);
 
+  const alerts = data?.alerts ?? [];
+  // Franja arriba solo para lo grave que afecta a esta estación; lo demás, detrás del botón.
+  const banner = alerts.find((a) => a.severe && a.here);
+  const onlyAccess = alerts.length > 0 && alerts.every((a) => a.kind === 'access');
+
   const toggleLine = (name: string) =>
     setLineFilter((prev) => (prev.includes(name) ? prev.filter((n) => n !== name) : [...prev, name]));
 
@@ -241,6 +299,15 @@ export function StopPanel({ stop, isFavorite, onToggleFavorite, onClose, tracked
           <div className="panel-meta">
             <span>{stop.network}</span>
             {stop.lines.length === 1 && <LineChip line={stop.lines[0]} small />}
+            {alerts.length > 0 && (
+              <button
+                className={`alerts-toggle${showAlerts ? ' on' : ''}`}
+                aria-expanded={showAlerts}
+                onClick={() => setShowAlerts((v) => !v)}
+              >
+                {onlyAccess ? '♿' : '⚠'} {alerts.length} {alerts.length === 1 ? 'aviso' : 'avisos'}
+              </button>
+            )}
           </div>
         </div>
         <button
@@ -255,6 +322,13 @@ export function StopPanel({ stop, isFavorite, onToggleFavorite, onClose, tracked
           ✕
         </button>
       </header>
+
+      {banner && !showAlerts && (
+        <button className="alert-banner" onClick={() => setShowAlerts(true)} title="Ver avisos">
+          <span aria-hidden="true">⚠</span>
+          <span className="alert-banner-text">{banner.text}</span>
+        </button>
+      )}
 
       <div className="panel-controls">
         {stop.lines.length > 1 && (
@@ -305,6 +379,7 @@ export function StopPanel({ stop, isFavorite, onToggleFavorite, onClose, tracked
             )}
           </p>
         )}
+        {showAlerts && <AlertList alerts={alerts} />}
         {error && !data && !waking && !loading && <p className="placeholder error">{error} · reintentando…</p>}
         {data && visible.length === 0 && <p className="placeholder">{emptyText}</p>}
         {data && visible.length > 0 && (

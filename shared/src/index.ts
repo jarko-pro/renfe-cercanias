@@ -66,11 +66,27 @@ export interface TripLive {
   updatedAt: number | null;
 }
 
+/** Aviso de Renfe que afecta a una estación o a alguna de sus líneas. */
+export interface StopAlert {
+  id: string;
+  text: string;
+  /** Líneas de esta estación a las que afecta (vacío si es un aviso solo de la estación). */
+  lines: Line[];
+  /** 'access': ascensores, escaleras, accesibilidad. 'service': todo lo demás. */
+  kind: 'service' | 'access';
+  /** Corta o altera mucho el servicio (suspendido, no circula, autobús...). */
+  severe: boolean;
+  /** Afecta a esta estación en concreto (la nombra o va asociado a ella). */
+  here: boolean;
+}
+
 export interface ArrivalsResponse {
   stop: Stop;
   generatedAt: number;
   realtimeAgeSec: number | null;
   arrivals: Arrival[];
+  /** Ordenados: primero los graves de esta estación, los de accesibilidad al final. */
+  alerts: StopAlert[];
 }
 
 /** Trazado de un viaje de origen a destino, en su sentido. Vacío si Renfe no lo publica. */
@@ -86,5 +102,6 @@ export interface HealthResponse {
   realtimeFetchedAt: number | null;
   realtimeTrips: number;
   vehicles: number;
+  alerts: number;
   error?: string;
 }

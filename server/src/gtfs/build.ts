@@ -150,5 +150,5 @@ export async function buildGtfsData(src: GtfsSource, today: string): Promise<Gtf
     shapes.set(id, packed);
   }
 
-  return { loadedAt: Date.now(), today, stops, lines, trips, servicesByDate, stopTimesByStop, tripStops, shapes };
+  return { loadedAt: Date.now(), today, stops, lines, trips, servicesByDate, stopTimesByStop, routesByStop, tripStops, shapes };
 }
