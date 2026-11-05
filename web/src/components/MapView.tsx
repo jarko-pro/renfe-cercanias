@@ -180,7 +180,7 @@ export function MapView({ stops, selectedId, favoriteIds, focus, onSelect, train
       <MapContainer center={SPAIN} zoom={6} preferCanvas zoomControl={false} className="map">
         <TileLayer
           // Renfe exige citar la fuente ("Origen de los datos: Renfe Operadora") en sus datos abiertos.
-          attribution='Origen de los datos: <a href="https://data.renfe.com/" target="_blank" rel="noopener">Renfe Operadora</a> · &copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a>'
+          attribution='Origen de los datos: <a href="https://data.renfe.com/" target="_blank" rel="noopener">Renfe Operadora</a> · &copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a> · <a href="./privacidad.html">Privacidad</a>'
           url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
           maxZoom={19}
         />

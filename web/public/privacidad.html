@@ -1,0 +1,165 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#8a0b3a" />
+    <title>Privacidad · Cercanías en directo</title>
+    <link rel="icon" href="./icon.svg" type="image/svg+xml" />
+    <style>
+      :root {
+        --bg: #ffffff;
+        --text: #17171c;
+        --text-2: #5d5d6b;
+        --border: #e3e3e8;
+        --brand: #8a0b3a;
+        color-scheme: light dark;
+      }
+      @media (prefers-color-scheme: dark) {
+        :root {
+          --bg: #111114;
+          --text: #f1f1f4;
+          --text-2: #a3a3b0;
+          --border: #33333c;
+          --brand: #e0708f;
+        }
+      }
+      body {
+        margin: 0;
+        background: var(--bg);
+        color: var(--text);
+        font: 16px/1.6 system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+      }
+      main {
+        max-width: 680px;
+        margin: 0 auto;
+        padding: 32px 16px 64px;
+      }
+      h1 {
+        font-size: 28px;
+        line-height: 1.2;
+        margin: 0 0 4px;
+      }
+      h2 {
+        font-size: 18px;
+        margin: 32px 0 8px;
+      }
+      p,
+      li {
+        color: var(--text);
+      }
+      .meta {
+        color: var(--text-2);
+        margin: 0 0 24px;
+      }
+      .summary {
+        border-left: 3px solid var(--brand);
+        padding: 4px 0 4px 16px;
+        margin: 24px 0;
+      }
+      a {
+        color: var(--brand);
+      }
+      ul {
+        padding-left: 20px;
+      }
+      .back {
+        display: inline-block;
+        margin-bottom: 24px;
+        text-decoration: none;
+        font-weight: 600;
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <a class="back" href="./">← Volver a la app</a>
+      <h1>Política de privacidad</h1>
+      <p class="meta">Cercanías en directo · Última actualización: 5 de noviembre de 2026</p>
+
+      <div class="summary">
+        <p>
+          <strong>En resumen:</strong> no hay cuentas ni registro, no usamos cookies y no guardamos datos que te
+          identifiquen. Tus favoritas se quedan en tu móvil. Contamos de forma anónima qué se usa de la app para
+          mejorarla.
+        </p>
+      </div>
+
+      <h2>Quién es el responsable</h2>
+      <p>
+        Cercanías en directo es una aplicación independiente desarrollada por Pablo Nodar. Para cualquier consulta
+        sobre privacidad puedes escribir a <a href="mailto:contacto@cercaniasendirecto.com">contacto@cercaniasendirecto.com</a>.
+      </p>
+      <p>
+        <strong>No es una aplicación oficial de Renfe</strong> ni está patrocinada ni respaldada por Renfe. Los
+        horarios, la posición de los trenes y los avisos proceden de los datos abiertos que publica Renfe.
+        Origen de los datos: <a href="https://data.renfe.com/" target="_blank" rel="noopener">Renfe Operadora</a>.
+      </p>
+
+      <h2>Qué datos se usan y para qué</h2>
+      <ul>
+        <li>
+          <strong>Estaciones favoritas.</strong> Se guardan solo en tu dispositivo. No salen de él y se borran si
+          desinstalas la app o borras los datos del navegador.
+        </li>
+        <li>
+          <strong>Tu ubicación.</strong> Solo se pide si pulsas el botón «Mi ubicación», y únicamente para centrar el
+          mapa. Se usa en tu dispositivo: no se envía a nuestro servidor ni se guarda.
+        </li>
+        <li>
+          <strong>Consultas de horarios y trenes.</strong> Para mostrarte los próximos trenes, la app pide los datos
+          de la estación o del tren que eliges a nuestro servidor. Los registros técnicos del servidor solo anotan la
+          dirección consultada (por ejemplo, la estación) y no tu dirección IP.
+        </li>
+        <li>
+          <strong>Estadísticas de uso anónimas.</strong> Contamos visitas y algunas acciones: qué estación se
+          consulta, qué línea se sigue en directo, cuándo se añade una favorita y si la app está instalada. Junto a
+          ellas se registran el tipo de dispositivo y de navegador, el idioma, el tamaño de pantalla y el país y la
+          ciudad aproximados. Usamos
+          <a href="https://umami.is/" target="_blank" rel="noopener">Umami</a>, una herramienta que no usa cookies ni
+          te sigue entre webs. Tu dirección IP se usa en el momento para calcular la ubicación aproximada, pero ni
+          nosotros ni Umami la guardamos.
+        </li>
+      </ul>
+
+      <h2>Servicios de terceros</h2>
+      <p>Para funcionar, la app se apoya en estos servicios, que pueden ver tu dirección IP al conectarte a ellos:</p>
+      <ul>
+        <li>
+          <strong>GitHub Pages</strong> (GitHub, Inc.), donde se aloja la app.
+          <a href="https://docs.github.com/es/site-policy/privacy-policies/github-general-privacy-statement" target="_blank" rel="noopener">Su política de privacidad</a>.
+        </li>
+        <li>
+          <strong>Render</strong> (Render Services, Inc.), donde funciona nuestro servidor, en la Unión Europea
+          (Fráncfort). <a href="https://render.com/privacy" target="_blank" rel="noopener">Su política de privacidad</a>.
+        </li>
+        <li>
+          <strong>OpenStreetMap</strong>, que sirve las imágenes del mapa.
+          <a href="https://osmfoundation.org/wiki/Privacy_Policy" target="_blank" rel="noopener">Su política de privacidad</a>.
+        </li>
+        <li>
+          <strong>Umami</strong>, para las estadísticas anónimas descritas arriba.
+          <a href="https://umami.is/privacy" target="_blank" rel="noopener">Su política de privacidad</a>.
+        </li>
+      </ul>
+
+      <h2>Lo que no hacemos</h2>
+      <ul>
+        <li>No pedimos nombre, correo ni ningún otro dato personal.</li>
+        <li>No usamos cookies ni identificadores publicitarios.</li>
+        <li>No vendemos ni compartimos datos con fines publicitarios.</li>
+      </ul>
+
+      <h2>Tus derechos</h2>
+      <p>
+        Como no guardamos datos que te identifiquen, normalmente no tendremos nada que mostrarte o borrar. Aun así,
+        puedes ejercer tus derechos de acceso, rectificación, supresión, oposición, limitación y portabilidad
+        escribiendo al correo de arriba. También puedes reclamar ante la
+        <a href="https://www.aepd.es/" target="_blank" rel="noopener">Agencia Española de Protección de Datos</a>.
+      </p>
+
+      <h2>Cambios</h2>
+      <p>Si cambiamos esta política, actualizaremos esta página y la fecha de arriba.</p>
+    </main>
+  </body>
+</html>
