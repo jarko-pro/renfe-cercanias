@@ -33,6 +33,11 @@ export interface Arrival {
   /** Retraso en segundos (null si no hay datos de tiempo real). */
   delaySec: number | null;
   realtime: boolean;
+  /**
+   * Sin ningún dato en tiempo real cuando ya debería tenerlos (ya ha salido de su origen o
+   * sale en unos minutos). Puede ir con retraso o estar cancelado: la hora no es fiable.
+   */
+  unconfirmed: boolean;
   cancelled: boolean;
   /** El tren termina su recorrido en esta parada. */
   terminates: boolean;

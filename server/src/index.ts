@@ -23,7 +23,14 @@ const RT_INTERVAL_MS = 30_000;
 const VP_INTERVAL_MS = 30_000;
 
 // trustProxy: detrás del proxy de Render, req.ip es la IP real del usuario (X-Forwarded-For).
-const app = Fastify({ logger: { level: process.env.LOG_LEVEL ?? 'info' }, trustProxy: true });
+const app = Fastify({
+  logger: {
+    level: process.env.LOG_LEVEL ?? 'info',
+    // Sin IP ni otros datos del usuario en los registros: solo método y ruta.
+    serializers: { req: (req) => ({ method: req.method, url: req.url }) },
+  },
+  trustProxy: true,
+});
 await app.register(cors, { origin: true });
 
 let gtfs: GtfsData | null = null;

@@ -76,6 +76,7 @@ export function getArrivals(
         minutes: minutesUntil(estimated, nowMs),
         delaySec,
         realtime: rtTrip != null,
+        unconfirmed: !rtTrip && !vehicle && departsFromOriginBy(data, st.tripId, base) <= nowMs + UNCONFIRMED_AHEAD_MS,
         cancelled: !!rtTrip?.cancelled || !!rtStop?.skipped,
         terminates: trip.lastStopId === stopId,
         hasPosition: vehicle?.lat != null && vehicle.lon != null,
@@ -87,6 +88,21 @@ export function getArrivals(
 
   out.sort((a, b) => a.estimated - b.estimated);
   return out.slice(0, limit);
+}
+
+/**
+ * Un tren sin datos en tiempo real es normal si sale dentro de un rato. Si ya ha salido de
+ * su origen o sale en menos de esto, debería tenerlos: se marca como "sin confirmar".
+ * (Medido el 2026-11-05: ~28 % de los trenes que deberían circular no tienen datos; un
+ * cuarto aparece en unos minutos, el resto no: retraso en publicar o cancelación sin avisar.)
+ */
+const UNCONFIRMED_AHEAD_MS = 5 * 60_000;
+
+/** Hora programada de salida del viaje desde su primera parada (epoch ms). */
+function departsFromOriginBy(data: GtfsData, tripId: string, base: number): number {
+  const first = data.tripStops.get(tripId)?.[0];
+  const st = first ? data.stopTimesByStop.get(first)?.find((s) => s.tripId === tripId) : undefined;
+  return st ? base + st.dep * 1000 : Infinity;
 }
 
 /** A partir de esta distancia, un tren "en tránsito" desde nuestra parada ya ha salido. */

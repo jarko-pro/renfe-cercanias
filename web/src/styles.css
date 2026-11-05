@@ -440,6 +440,10 @@ body {
   background: var(--live-bg);
   color: var(--live);
 }
+.badge.warn {
+  background: var(--warn-bg);
+  color: var(--warn);
+}
 .badge.danger {
   background: var(--danger-bg);
   color: var(--danger);
@@ -755,4 +759,9 @@ button.arrival.following {
 .alert a {
   color: inherit;
   font-weight: 600;
+}
+
+/* Tren sin datos de Renfe cuando debería tenerlos: la hora no es fiable. */
+.eta.unsure {
+  opacity: 0.45;
 }

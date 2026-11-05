@@ -125,7 +125,10 @@ function ArrivalRow({ a, now, live, onTrack }: RowProps) {
       : a.vehicleStatus === 'arriving' && minutes <= 2
         ? 'Entrando'
         : minutes === 0
-          ? 'Ahora'
+          ? // Sin datos de Renfe no se puede afirmar que el tren esté llegando.
+            a.unconfirmed
+            ? '—'
+            : 'Ahora'
           : null;
   const platformText = a.platform
     ? `${atPlatform ? 'En vía' : 'Vía'} ${a.platform}`
@@ -157,6 +160,13 @@ function ArrivalRow({ a, now, live, onTrack }: RowProps) {
                 <span className="dot" />
                 {delayMin > 0 ? `+${delayMin} min` : 'En hora'}
               </span>
+            ) : a.unconfirmed ? (
+              <span
+                className="badge warn"
+                title="Renfe no da datos en tiempo real de este tren: puede ir con retraso o estar cancelado"
+              >
+                Sin confirmar
+              </span>
             ) : (
               <span className="badge muted" title="Sin datos en tiempo real: horario programado">
                 Programado
@@ -186,9 +196,9 @@ function ArrivalRow({ a, now, live, onTrack }: RowProps) {
             )}
           </span>
         </span>
-        <span className="eta">
+        <span className={`eta${a.unconfirmed ? ' unsure' : ''}`}>
           {eta != null ? (
-            <span className={a.cancelled ? undefined : 'now'}>{eta}</span>
+            <span className={eta === '—' ? undefined : 'now'}>{eta}</span>
           ) : (
             <>
               <strong>{minutes}</strong>

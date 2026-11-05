@@ -166,6 +166,31 @@ describe('getArrivals', () => {
     expect(a.minutes).toBe(17);
   });
 
+  describe('trenes sin confirmar', () => {
+    it('marca el tren sin datos que ya debería haber salido de su origen', async () => {
+      const data = await buildGtfsData(source(FILES), TODAY);
+      // A sale de S1 a las 08:00; a las 08:05 sin ningún dato en tiempo real.
+      const [a] = getArrivals(data, noRt, 'S2', at(TODAY, 8, 5));
+      expect(a.tripId).toBe('A');
+      expect(a.unconfirmed).toBe(true);
+    });
+
+    it('marca el que sale de origen en menos de 5 min sin datos, pero no el que sale más tarde', async () => {
+      const data = await buildGtfsData(source(FILES), TODAY);
+      expect(getArrivals(data, noRt, 'S1', at(TODAY, 7, 56))[0].unconfirmed).toBe(true);
+      expect(getArrivals(data, noRt, 'S1', at(TODAY, 7, 50))[0].unconfirmed).toBe(false);
+    });
+
+    it('no marca el tren con datos en tiempo real o con posición', async () => {
+      const data = await buildGtfsData(source(FILES), TODAY);
+      const rt = { trips: new Map<string, TripRealtime>([['A', { delaySec: 0, cancelled: false, stops: new Map() }]]) };
+      expect(getArrivals(data, rt, 'S2', at(TODAY, 8, 5))[0].unconfirmed).toBe(false);
+      const veh: VehicleState = { lat: 40, lon: -3, stopId: 'S1', status: 'in_transit', timestamp: null };
+      const withVeh = { trips: new Map<string, TripRealtime>(), vehicles: new Map([['A', veh]]) };
+      expect(getArrivals(data, withVeh, 'S2', at(TODAY, 8, 5))[0].unconfirmed).toBe(false);
+    });
+  });
+
   it('marca trenes cancelados', async () => {
     const data = await buildGtfsData(source(FILES), TODAY);
     const rt = { trips: new Map<string, TripRealtime>([['B', { cancelled: true, stops: new Map() }]]) };
