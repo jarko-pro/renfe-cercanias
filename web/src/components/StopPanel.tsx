@@ -49,7 +49,8 @@ function whereText(live: TripLive | null | undefined): string {
   if (!live.stopName) return 'En camino';
   if (live.status === 'stopped') return `En ${live.stopName}`;
   if (live.status === 'incoming') return `Llegando a ${live.stopName}`;
-  return `Hacia ${live.stopName}`;
+  // En marcha, Renfe da la parada que acaba de dejar; la siguiente la calcula el servidor.
+  return live.nextStopName ? `Entre ${live.stopName} y ${live.nextStopName}` : `Saliendo de ${live.stopName}`;
 }
 
 interface RowProps {

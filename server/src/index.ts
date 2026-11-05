@@ -1,11 +1,12 @@
 import { createHash } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import cors from '@fastify/cors';
-import type { ArrivalsResponse, HealthResponse, Stop, TripLive, TripShape } from '@renfe/shared';
+import type { ArrivalsResponse, HealthResponse, Stop, TripShape } from '@renfe/shared';
 import Fastify from 'fastify';
 import { getArrivals } from './arrivals.js';
 import { downloadGtfs, loadGtfs } from './gtfs/loader.js';
 import type { GtfsData } from './gtfs/types.js';
+import { buildTripLive } from './live.js';
 import { createRealtimePoller } from './realtime/poller.js';
 import { createVehiclePoller } from './realtime/vehicles.js';
 import { tripPath } from './shape.js';
@@ -114,22 +115,8 @@ app.get<{ Params: { id: string } }>('/api/stops/:id/arrivals', async (req, reply
 app.get<{ Params: { tripId: string } }>('/api/trips/:tripId/live', async (req, reply) => {
   if (!gtfs) return reply.code(503).send({ error: 'Cargando datos de Renfe, prueba en unos segundos' });
   const { tripId } = req.params;
-  const trip = gtfs.trips.get(tripId);
-  if (!trip) return reply.code(404).send({ error: 'Tren no encontrado' });
-  const v = positions.state.vehicles.get(tripId);
-  const rtTrip = realtime.state.trips.get(tripId);
-  const res: TripLive = {
-    tripId,
-    line: gtfs.lines.get(trip.routeId) ?? { name: '?', color: '7A7A7A', textColor: 'FFFFFF' },
-    headsign: trip.headsign,
-    position: v?.lat != null && v.lon != null ? { lat: v.lat, lon: v.lon } : null,
-    status: v?.status ?? null,
-    stopId: v?.stopId || null,
-    stopName: (v?.stopId && gtfs.stops.get(v.stopId)?.name) || null,
-    ...(v?.platform ? { platform: v.platform } : {}),
-    delaySec: rtTrip?.delaySec ?? null,
-    updatedAt: v?.timestamp ?? null,
-  };
+  const res = buildTripLive(gtfs, tripId, positions.state.vehicles.get(tripId), realtime.state.trips.get(tripId));
+  if (!res) return reply.code(404).send({ error: 'Tren no encontrado' });
   reply.header('Cache-Control', 'no-store');
   return res;
 });

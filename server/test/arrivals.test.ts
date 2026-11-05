@@ -65,6 +65,12 @@ describe('buildGtfsData', () => {
     expect(data.stops.get('S2')!.network).toBe('Madrid');
   });
 
+  it('guarda las paradas de cada viaje en orden', async () => {
+    const data = await buildGtfsData(source(FILES), TODAY);
+    expect(data.tripStops.get('A')).toEqual(['S1', 'S2', 'S3']);
+    expect(data.trips.get('B')!.firstStopId).toBe('S3');
+  });
+
   it('usa la última parada como destino cuando trip_headsign está vacío', async () => {
     const data = await buildGtfsData(source(FILES), TODAY);
     expect(data.trips.get('A')!.headsign).toBe('Destino');
@@ -168,9 +174,14 @@ describe('getArrivals', () => {
   });
 
   describe('posición real del tren', () => {
-    const veh = (stopId: string, status: VehicleState['status'], platform?: string): VehicleState => ({
-      lat: 40,
-      lon: -3,
+    const veh = (
+      stopId: string,
+      status: VehicleState['status'],
+      platform?: string,
+      [lat, lon]: [number, number] = [40, -3],
+    ): VehicleState => ({
+      lat,
+      lon,
       stopId,
       status,
       platform,
@@ -195,11 +206,26 @@ describe('getArrivals', () => {
       expect(a.platform).toBeUndefined();
     });
 
-    it('no marca nada si el tren solo va de camino a la estación', async () => {
+    it('no marca nada si el tren va en marcha desde la parada anterior', async () => {
       const data = await buildGtfsData(source(FILES), TODAY);
-      const [a] = getArrivals(data, withVeh(veh('S2', 'in_transit', '3')), 'S2', at(TODAY, 8, 5));
+      const [a] = getArrivals(data, withVeh(veh('S1', 'in_transit', '3')), 'S2', at(TODAY, 8, 5));
+      expect(a.tripId).toBe('A');
       expect(a.vehicleStatus).toBeUndefined();
       expect(a.platform).toBeUndefined();
+    });
+
+    // Renfe pone en "en tránsito" la parada que el tren acaba de dejar.
+    it('descarta el tren en tránsito desde nuestra parada si ya está lejos de ella', async () => {
+      const data = await buildGtfsData(source(FILES), TODAY);
+      const res = getArrivals(data, withVeh(veh('S2', 'in_transit', undefined, [40.41, -3.69])), 'S2', at(TODAY, 8, 10));
+      expect(res.find((a) => a.tripId === 'A')).toBeUndefined();
+    });
+
+    it('mantiene el tren en tránsito desde nuestra parada si aún está saliendo', async () => {
+      const data = await buildGtfsData(source(FILES), TODAY);
+      const [a] = getArrivals(data, withVeh(veh('S2', 'in_transit', undefined, [40.4005, -3.69])), 'S2', at(TODAY, 8, 10));
+      expect(a.tripId).toBe('A');
+      expect(a.vehicleStatus).toBeUndefined();
     });
 
     it('descarta el tren que ya está en una parada posterior aunque la estimación diga que no ha llegado', async () => {

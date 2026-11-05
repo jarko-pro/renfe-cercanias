@@ -31,6 +31,8 @@ export interface GtfsData {
   servicesByDate: Map<string, Set<string>>;
   /** stop_id -> paso de trenes (solo viajes activos), ordenado por hora. */
   stopTimesByStop: Map<string, StopTime[]>;
+  /** trip_id -> paradas del viaje en orden (solo viajes activos). */
+  tripStops: Map<string, string[]>;
   /** shape_id -> puntos del trazado empaquetados [lat0, lon0, lat1, lon1, ...]. */
   shapes: Map<string, Float64Array>;
 }

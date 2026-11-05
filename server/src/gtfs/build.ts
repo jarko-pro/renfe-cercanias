@@ -68,6 +68,7 @@ export async function buildGtfsData(src: GtfsSource, today: string): Promise<Gtf
   const stopTimesByStop = new Map<string, StopTime[]>();
   const lastSeq = new Map<string, number>();
   const firstSeq = new Map<string, number>();
+  const tripSeqStops = new Map<string, { seq: number; stopId: string }[]>();
   for await (const r of src.rows('stop_times.txt')) {
     const stopId = r.stop_id;
     if (!rawStops.has(stopId)) continue;
@@ -85,6 +86,9 @@ export async function buildGtfsData(src: GtfsSource, today: string): Promise<Gtf
     let list = stopTimesByStop.get(stopId);
     if (!list) stopTimesByStop.set(stopId, (list = []));
     list.push({ tripId: r.trip_id, arr, dep, seq });
+    let seqs = tripSeqStops.get(r.trip_id);
+    if (!seqs) tripSeqStops.set(r.trip_id, (seqs = []));
+    seqs.push({ seq, stopId });
     if (seq > (lastSeq.get(r.trip_id) ?? -1)) {
       lastSeq.set(r.trip_id, seq);
       trip.lastStopId = stopId;
@@ -118,6 +122,11 @@ export async function buildGtfsData(src: GtfsSource, today: string): Promise<Gtf
     stops.set(id, { id, name: s.name, lat: s.lat, lon: s.lon, network, lines: sortedLines });
   }
 
+  const tripStops = new Map<string, string[]>();
+  for (const [tripId, seqs] of tripSeqStops) {
+    tripStops.set(tripId, seqs.sort((a, b) => a.seq - b.seq).map((s) => s.stopId));
+  }
+
   // Trazados: solo los que usan los viajes activos.
   const usedShapes = new Set<string>();
   for (const t of trips.values()) if (t.shapeId) usedShapes.add(t.shapeId);
@@ -141,5 +150,5 @@ export async function buildGtfsData(src: GtfsSource, today: string): Promise<Gtf
     shapes.set(id, packed);
   }
 
-  return { loadedAt: Date.now(), today, stops, lines, trips, servicesByDate, stopTimesByStop, shapes };
+  return { loadedAt: Date.now(), today, stops, lines, trips, servicesByDate, stopTimesByStop, tripStops, shapes };
 }

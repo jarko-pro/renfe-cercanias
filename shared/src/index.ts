@@ -51,10 +51,15 @@ export interface TripLive {
   headsign: string;
   /** null si el tren aún no aparece en el feed (no ha salido de origen). */
   position: { lat: number; lon: number } | null;
-  /** Respecto a `stopId`: entrando, parado en ella o de camino a ella. */
+  /**
+   * Respecto a `stopId`: entrando en ella, parado en ella o en marcha tras salir de ella
+   * (Renfe da en ese caso la última parada, no la siguiente).
+   */
   status: 'incoming' | 'stopped' | 'in_transit' | null;
   stopId: string | null;
   stopName: string | null;
+  /** En marcha: la parada a la que se dirige (calculada con el recorrido del viaje). */
+  nextStopName: string | null;
   platform?: string;
   delaySec: number | null;
   /** Hora de la posición (epoch ms). */

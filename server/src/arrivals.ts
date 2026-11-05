@@ -2,6 +2,7 @@ import type { Arrival } from '@renfe/shared';
 import type { GtfsData } from './gtfs/types.js';
 import type { RealtimeState, StopUpdate, TripRealtime } from './realtime/poller.js';
 import type { VehicleState } from './realtime/vehicles.js';
+import { distM } from './shape.js';
 import { addDays, localDate, serviceDayBase } from './time.js';
 
 /** Mismo criterio que la web: 0 ("Ahora") a menos de 30 s; si no, minutos redondeados. */
@@ -88,6 +89,9 @@ export function getArrivals(
   return out.slice(0, limit);
 }
 
+/** A partir de esta distancia, un tren "en tránsito" desde nuestra parada ya ha salido. */
+const PASSED_M = 300;
+
 /**
  * Dónde está el tren respecto a nuestra parada: entrando, parado en ella, ya pasado o
  * (null) todavía de camino / sin datos útiles.
@@ -102,6 +106,10 @@ function vehiclePosition(
   if (v.stopId === stopId) {
     if (v.status === 'stopped') return 'at_platform';
     if (v.status === 'incoming') return 'arriving';
+    // "En tránsito" con nuestra parada: Renfe indica la última parada que ha dejado, así que
+    // si ya está lejos de ella es que ha salido. Muy cerca puede estar aún arrancando.
+    const stop = data.stops.get(stopId);
+    if (stop && v.lat != null && v.lon != null && distM(stop.lat, stop.lon, v.lat, v.lon) > PASSED_M) return 'passed';
     return null;
   }
   const vSeq = data.stopTimesByStop.get(v.stopId)?.find((s) => s.tripId === tripId)?.seq;

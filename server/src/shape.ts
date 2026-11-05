@@ -4,7 +4,7 @@ import type { GtfsData } from './gtfs/types.js';
 const MIN_STEP_M = 25;
 
 /** Distancia aproximada en metros (equirectangular: sobra a escala de una línea de cercanías). */
-function distM(lat1: number, lon1: number, lat2: number, lon2: number): number {
+export function distM(lat1: number, lon1: number, lat2: number, lon2: number): number {
   const x = (lon2 - lon1) * Math.cos(((lat1 + lat2) / 2) * (Math.PI / 180));
   const y = lat2 - lat1;
   return Math.sqrt(x * x + y * y) * 111_320;
