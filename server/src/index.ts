@@ -10,6 +10,7 @@ import { buildTripLive } from './live.js';
 import { createRealtimePoller } from './realtime/poller.js';
 import { createVehiclePoller } from './realtime/vehicles.js';
 import { tripPath } from './shape.js';
+import { registerStats } from './stats.js';
 import { localDate } from './time.js';
 
 const PORT = Number(process.env.PORT ?? 3001);
@@ -19,7 +20,8 @@ const RT_INTERVAL_MS = 30_000;
 /** Renfe regenera las posiciones cada ~30 s: pedirlas más a menudo no aporta nada. */
 const VP_INTERVAL_MS = 30_000;
 
-const app = Fastify({ logger: { level: process.env.LOG_LEVEL ?? 'info' } });
+// trustProxy: detrás del proxy de Render, req.ip es la IP real del usuario (X-Forwarded-For).
+const app = Fastify({ logger: { level: process.env.LOG_LEVEL ?? 'info' }, trustProxy: true });
 await app.register(cors, { origin: true });
 
 let gtfs: GtfsData | null = null;
@@ -130,6 +132,8 @@ app.get<{ Params: { tripId: string } }>('/api/trips/:tripId/shape', async (req, 
   reply.header('Cache-Control', 'public, max-age=3600');
   return res;
 });
+
+registerStats(app);
 
 await app.listen({ port: PORT, host: '0.0.0.0' });
 void refreshGtfs();

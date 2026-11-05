@@ -3,6 +3,9 @@ import type { ArrivalsResponse, Stop, TripLive, TripShape } from '@renfe/shared'
 /** Vacío en desarrollo (proxy de Vite). En Capacitor/producción: URL pública del backend. */
 const BASE = (import.meta.env.VITE_API_URL ?? '').replace(/\/$/, '');
 
+/** URL completa de un endpoint del backend. */
+export const apiUrl = (path: string) => `${BASE}${path}`;
+
 /** Tiempo máximo por petición: si el servidor está arrancando, se corta y se reintenta. */
 const TIMEOUT_MS = 20_000;
 
