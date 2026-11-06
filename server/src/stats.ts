@@ -10,7 +10,7 @@ const UMAMI_SEND_URL = 'https://cloud.umami.is/api/send';
 /** ID público de la web en Umami. Solo se reenvía lo que venga para esta web. */
 const WEBSITE_ID = process.env.UMAMI_ID ?? '7f703cd1-7662-449f-8100-8c59c01b53c6';
 /** Eventos que manda la web (`null` = visita). Cualquier otro se ignora. */
-const EVENTS = new Set(['estacion', 'seguir-tren', 'favorita', 'app-instalada', 'app-abierta']);
+const EVENTS = new Set(['estacion', 'seguir-tren', 'buscar-tren', 'favorita', 'app-instalada', 'app-abierta']);
 
 interface Body {
   website?: unknown;

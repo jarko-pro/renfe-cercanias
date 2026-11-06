@@ -20,3 +20,8 @@ const NETWORKS: Record<string, string> = {
 export function networkOf(routeId: string): string {
   return NETWORKS[routeId.slice(0, 2)] ?? 'Cercanías';
 }
+
+/** El número de tren va dentro del trip_id: 1008J19799C1 -> 19799 (siempre 5 cifras). */
+export function trainNumber(tripId: string): string | null {
+  return /^\d{4}[A-Z](\d+)/.exec(tripId)?.[1] ?? null;
+}

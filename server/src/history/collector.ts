@@ -1,6 +1,7 @@
 import type { GtfsData } from '../gtfs/types.js';
 import type { TripRealtime } from '../realtime/poller.js';
 import { addDays, serviceDayBase } from '../time.js';
+import { trainNumber } from '../gtfs/networks.js';
 
 /** Un viaje terminado, listo para guardar. */
 export interface TrainRun {
@@ -24,11 +25,6 @@ interface Tracked {
   delays: (number | null)[];
   cancelled: boolean;
   lastDelay: number;
-}
-
-/** El número de tren va dentro del trip_id: 1008J19799C1 -> 19799. */
-export function trainNumber(tripId: string): string | null {
-  return /^\d{4}[A-Z](\d+)/.exec(tripId)?.[1] ?? null;
 }
 
 /** Margen tras la hora prevista de llegada al destino antes de dar el viaje por terminado. */

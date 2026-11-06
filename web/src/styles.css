@@ -765,3 +765,26 @@ button.arrival.following {
 .eta.unsure {
   opacity: 0.45;
 }
+
+/* Número de tren junto al destino (el destino se recorta antes que el número) */
+.headsign-line {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  min-width: 0;
+}
+.headsign-line .headsign {
+  min-width: 0;
+}
+.train-no {
+  flex-shrink: 0;
+  font-size: 11px;
+  font-weight: 400;
+  color: var(--text-2);
+  font-variant-numeric: tabular-nums;
+}
+.train-result {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}

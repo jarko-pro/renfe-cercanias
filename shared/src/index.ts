@@ -18,6 +18,8 @@ export interface Stop {
 
 export interface Arrival {
   tripId: string;
+  /** Número de tren (p. ej. "19799"), el que Renfe muestra en sus pantallas y billetes. */
+  trainNumber?: string;
   line: Line;
   /** Destino del tren (última parada del recorrido). */
   headsign: string;
@@ -111,4 +113,19 @@ export interface HealthResponse {
   /** Histórico de retrasos: viajes en curso, guardados y último error de la base de datos. */
   history?: { enabled: boolean; pending: number; saved: number; lastError: string | null };
   error?: string;
+}
+
+/** Resultado de buscar un tren por su número. */
+export interface TrainMatch {
+  tripId: string;
+  train: string;
+  line: Line;
+  network: string;
+  headsign: string;
+  /** Estación que abrir: donde está o la próxima a la que llega; si aún no ha salido, su origen. */
+  stopId: string;
+  stopName: string;
+  state: 'running' | 'later';
+  /** Salida programada del origen (epoch ms). */
+  departure: number;
 }

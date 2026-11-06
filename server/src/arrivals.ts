@@ -2,6 +2,7 @@ import type { Arrival } from '@renfe/shared';
 import type { GtfsData } from './gtfs/types.js';
 import type { RealtimeState, StopUpdate, TripRealtime } from './realtime/poller.js';
 import type { VehicleState } from './realtime/vehicles.js';
+import { trainNumber } from './gtfs/networks.js';
 import { distM } from './shape.js';
 import { addDays, localDate, serviceDayBase } from './time.js';
 
@@ -69,6 +70,7 @@ export function getArrivals(
       const line = data.lines.get(trip.routeId) ?? { name: '?', color: '7A7A7A', textColor: 'FFFFFF' };
       out.push({
         tripId: st.tripId,
+        trainNumber: trainNumber(st.tripId) ?? undefined,
         line,
         headsign: trip.headsign,
         scheduled,

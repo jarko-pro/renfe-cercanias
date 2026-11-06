@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import cors from '@fastify/cors';
-import type { ArrivalsResponse, HealthResponse, Stop, TripShape } from '@renfe/shared';
+import type { ArrivalsResponse, HealthResponse, Stop, TrainMatch, TripShape } from '@renfe/shared';
 import Fastify from 'fastify';
 import { alertsForStop } from './alerts.js';
 import { getArrivals } from './arrivals.js';
@@ -12,6 +12,7 @@ import { createAlertsPoller } from './realtime/alerts.js';
 import { createRealtimePoller } from './realtime/poller.js';
 import { createVehiclePoller } from './realtime/vehicles.js';
 import { tripPath } from './shape.js';
+import { findTrains } from './trains.js';
 import { registerStats } from './stats.js';
 import { createHistory } from './history/index.js';
 import { localDate } from './time.js';
@@ -151,6 +152,21 @@ app.get<{ Params: { tripId: string } }>('/api/trips/:tripId/shape', async (req, 
   if (!gtfs.trips.has(tripId)) return reply.code(404).send({ error: 'Tren no encontrado' });
   const res: TripShape = { tripId, path: tripPath(gtfs, tripId) ?? [] };
   reply.header('Cache-Control', 'public, max-age=3600');
+  return res;
+});
+
+// Buscar un tren por su número (5 cifras): dónde está ahora o de dónde sale.
+app.get<{ Params: { number: string } }>('/api/trains/:number', async (req, reply) => {
+  if (!gtfs) return reply.code(503).send({ error: 'Cargando datos de Renfe, prueba en unos segundos' });
+  const { number } = req.params;
+  if (!/^\d{5}$/.test(number)) return reply.code(400).send({ error: 'El número de tren tiene 5 cifras' });
+  const res: TrainMatch[] = findTrains(
+    gtfs,
+    { trips: realtime.state.trips, vehicles: positions.state.vehicles },
+    number,
+    Date.now(),
+  );
+  reply.header('Cache-Control', 'no-store');
   return res;
 });
 

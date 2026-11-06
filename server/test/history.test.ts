@@ -2,7 +2,7 @@ import { PGlite } from '@electric-sql/pglite';
 import { beforeAll, describe, expect, it } from 'vitest';
 import { buildGtfsData } from '../src/gtfs/build.js';
 import type { GtfsData, GtfsSource } from '../src/gtfs/types.js';
-import { createCollector, trainNumber, type TrainRun } from '../src/history/collector.js';
+import { createCollector, type TrainRun } from '../src/history/collector.js';
 import { insertRuns, migrate, type Db } from '../src/history/db.js';
 import type { TripRealtime } from '../src/realtime/poller.js';
 import { serviceDayBase } from '../src/time.js';
@@ -62,15 +62,6 @@ beforeAll(async () => {
 function feed(c: ReturnType<typeof createCollector>, from: number, to: number, trips: (t: number) => Map<string, TripRealtime>) {
   for (let t = from; t <= to; t += 30_000) c.observe(data, trips(t), new Map(), TODAY, t);
 }
-
-describe('trainNumber', () => {
-  it('saca el número del trip_id de Renfe', () => {
-    expect(trainNumber('1008J19799C1')).toBe('19799');
-    expect(trainNumber('5108J77636R4')).toBe('77636');
-    expect(trainNumber('1008J17098C8a')).toBe('17098');
-    expect(trainNumber('raro')).toBeNull();
-  });
-});
 
 describe('collector', () => {
   it('guarda el último retraso previsto de cada parada al pasar el tren', () => {

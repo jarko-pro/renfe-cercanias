@@ -1,5 +1,5 @@
 import type { Arrival, ArrivalsResponse, Stop, StopAlert, TripLive } from '@renfe/shared';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { ApiError, fetchArrivals, isAbort } from '../lib/api';
 import { formatTime } from '../lib/text';
 import { LineChip } from './LineChip';
@@ -151,7 +151,14 @@ function ArrivalRow({ a, now, live, onTrack }: RowProps) {
       >
         <LineChip line={a.line} />
         <span className="arrival-main">
-          <span className="headsign">{a.headsign || 'Destino desconocido'}</span>
+          <span className="headsign-line">
+            <span className="headsign">{a.headsign || 'Destino desconocido'}</span>
+            {a.trainNumber && (
+              <span className="train-no" title="Número de tren">
+                nº {a.trainNumber}
+              </span>
+            )}
+          </span>
           <span className="arrival-sub">
             {a.cancelled ? (
               <span className="badge danger">Cancelado</span>
@@ -271,8 +278,10 @@ export function StopPanel({ stop, isFavorite, onToggleFavorite, onClose, tracked
     () => (data?.arrivals ?? []).filter((a) => a.estimated >= now - HIDE_AFTER_MS),
     [data, now],
   );
-  // Si el tren seguido ya ha pasado y sale de la lista, se deja de seguir.
-  const trackedGone = !!tracked && !!data && !all.some((a) => a.tripId === tracked.tripId);
+  // Si el tren seguido ya ha pasado y sale de la lista, se deja de seguir. Solo con los datos de
+  // esta estación: al cambiar de estación, durante un instante aún están los de la anterior.
+  const fresh = !!data && data.stop.id === stop.id;
+  const trackedGone = !!tracked && fresh && !all.some((a) => a.tripId === tracked.tripId);
   useEffect(() => {
     if (trackedGone) onTrack(null);
   }, [trackedGone, onTrack]);
@@ -286,6 +295,18 @@ export function StopPanel({ stop, isFavorite, onToggleFavorite, onClose, tracked
   // Pestañas solo donde terminan trenes (estaciones finales); en las intermedias no aportan.
   const showTabs = all.some((a) => a.terminates);
   const visible = (showTabs && tab === 'arrivals' ? arrivals : showTabs ? departures : byLine).slice(0, MAX_ROWS);
+
+  // Al empezar a seguir un tren (p. ej. desde el buscador), que su fila quede a la vista.
+  const listRef = useRef<HTMLUListElement>(null);
+  const shownFor = useRef<string | null>(null);
+  const trackedId = tracked?.tripId ?? null;
+  const trackedArrives = fresh && !!trackedId && arrivals.some((a) => a.tripId === trackedId);
+  useEffect(() => {
+    if (!trackedId || !fresh || shownFor.current === trackedId) return;
+    if (showTabs && trackedArrives && tab !== 'arrivals') return setTab('arrivals');
+    shownFor.current = trackedId;
+    listRef.current?.querySelector('.following')?.scrollIntoView({ block: 'nearest' });
+  }, [trackedId, fresh, showTabs, trackedArrives, tab]);
 
   const alerts = data?.alerts ?? [];
   // Franja arriba solo para lo grave que afecta a esta estación; lo demás, detrás del botón.
@@ -393,7 +414,7 @@ export function StopPanel({ stop, isFavorite, onToggleFavorite, onClose, tracked
         {error && !data && !waking && !loading && <p className="placeholder error">{error} · reintentando…</p>}
         {data && visible.length === 0 && <p className="placeholder">{emptyText}</p>}
         {data && visible.length > 0 && (
-          <ul className="arrivals">
+          <ul className="arrivals" ref={listRef}>
             {visible.map((a) => (
               <ArrivalRow
                 key={`${a.tripId}-${a.scheduled}`}

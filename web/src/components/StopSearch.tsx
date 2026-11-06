@@ -1,13 +1,18 @@
-import type { Stop } from '@renfe/shared';
+import type { Stop, TrainMatch } from '@renfe/shared';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { normalize } from '../lib/text';
+import { fetchTrains, isAbort } from '../lib/api';
+import { formatTime, normalize } from '../lib/text';
 import { LineChip } from './LineChip';
 
 interface Props {
   stops: Stop[];
   favorites: Stop[];
   onSelect: (stop: Stop) => void;
+  onSelectTrain: (train: TrainMatch) => void;
 }
+
+/** Los números de tren de Renfe tienen siempre 5 cifras. */
+const TRAIN_RE = /^\d{5}$/;
 
 /** Qué lista está desplegada bajo la barra. */
 type Mode = 'closed' | 'search' | 'favorites';
@@ -34,7 +39,34 @@ function StopRow({ s, active, onPick }: { s: Stop; active: boolean; onPick: () =
   );
 }
 
-export function StopSearch({ stops, favorites, onSelect }: Props) {
+function TrainRow({ t, active, onPick }: { t: TrainMatch; active: boolean; onPick: () => void }) {
+  return (
+    <li
+      role="option"
+      aria-selected={active}
+      className={active ? 'active' : ''}
+      onMouseDown={(e) => e.preventDefault()}
+      onClick={onPick}
+    >
+      <div className="result-name train-result">
+        <LineChip line={t.line} small />
+        <span>
+          Tren {t.train} → {t.headsign || 'Destino desconocido'}
+        </span>
+      </div>
+      <div className="result-meta">
+        <span>
+          {t.state === 'running'
+            ? `En marcha · próxima parada: ${t.stopName}`
+            : `Sale a las ${formatTime(t.departure)} de ${t.stopName}`}
+        </span>
+        <span>{t.network}</span>
+      </div>
+    </li>
+  );
+}
+
+export function StopSearch({ stops, favorites, onSelect, onSelectTrain }: Props) {
   const [query, setQuery] = useState('');
   const [mode, setMode] = useState<Mode>('closed');
   const [active, setActive] = useState(0);
@@ -55,6 +87,26 @@ export function StopSearch({ stops, favorites, onSelect }: Props) {
     return [...starts, ...contains].slice(0, 8);
   }, [query, indexed]);
 
+  // Búsqueda por número de tren: solo con las 5 cifras, para no lanzar peticiones a cada tecla.
+  const trainQuery = TRAIN_RE.test(query.trim()) ? query.trim() : null;
+  const digitsOnly = /^\d{1,4}$/.test(query.trim());
+  const [trains, setTrains] = useState<{ q: string; list: TrainMatch[] | null; error?: boolean } | null>(null);
+  useEffect(() => {
+    if (!trainQuery) return setTrains(null);
+    setTrains({ q: trainQuery, list: null });
+    const ctrl = new AbortController();
+    const t = setTimeout(() => {
+      fetchTrains(trainQuery, ctrl.signal)
+        .then((list) => setTrains({ q: trainQuery, list }))
+        .catch((e) => !isAbort(e) && setTrains({ q: trainQuery, list: [], error: true }));
+    }, 200);
+    return () => {
+      clearTimeout(t);
+      ctrl.abort();
+    };
+  }, [trainQuery]);
+  const trainResults = trainQuery && trains?.q === trainQuery ? (trains.list ?? []) : [];
+
   const results = mode === 'favorites' ? favorites : searchResults;
 
   // Cerrar al pulsar fuera.
@@ -74,10 +126,20 @@ export function StopSearch({ stops, favorites, onSelect }: Props) {
     inputRef.current?.blur();
   };
 
+  const pickTrain = (t: TrainMatch) => {
+    onSelectTrain(t);
+    setQuery('');
+    setMode('closed');
+    inputRef.current?.blur();
+  };
+
+  const trainMode = mode === 'search' && !!trainQuery;
   const onKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === 'ArrowDown') setActive((i) => Math.min(i + 1, results.length - 1));
+    const count = trainMode ? trainResults.length : results.length;
+    if (e.key === 'ArrowDown') setActive((i) => Math.min(i + 1, count - 1));
     else if (e.key === 'ArrowUp') setActive((i) => Math.max(i - 1, 0));
-    else if (e.key === 'Enter' && results[active]) pick(results[active]);
+    else if (e.key === 'Enter' && trainMode && trainResults[active]) pickTrain(trainResults[active]);
+    else if (e.key === 'Enter' && !trainMode && results[active]) pick(results[active]);
     else if (e.key === 'Escape') setMode('closed');
   };
 
@@ -89,9 +151,9 @@ export function StopSearch({ stops, favorites, onSelect }: Props) {
         <input
           ref={inputRef}
           type="search"
-          placeholder="Buscar estación…"
+          placeholder="Buscar estación o nº de tren…"
           value={query}
-          aria-label="Buscar estación"
+          aria-label="Buscar estación o número de tren"
           aria-expanded={mode === 'search' && searchResults.length > 0}
           onChange={(e) => {
             setQuery(e.target.value);
@@ -123,7 +185,31 @@ export function StopSearch({ stops, favorites, onSelect }: Props) {
         </button>
       </div>
 
-      {mode === 'search' && searchResults.length > 0 && (
+      {trainMode && (
+        <ul className="search-results" role="listbox" aria-label={`Tren ${trainQuery}`}>
+          {trains?.q !== trainQuery || trains.list == null ? (
+            <li className="search-empty">Buscando el tren {trainQuery}…</li>
+          ) : trainResults.length === 0 ? (
+            <li className="search-empty">
+              {trains.error
+                ? 'No se ha podido buscar el tren. Prueba de nuevo en unos segundos.'
+                : `No hay ningún tren ${trainQuery} pendiente hoy.`}
+            </li>
+          ) : (
+            trainResults.map((t, i) => (
+              <TrainRow key={t.tripId} t={t} active={i === active} onPick={() => pickTrain(t)} />
+            ))
+          )}
+        </ul>
+      )}
+
+      {mode === 'search' && digitsOnly && (
+        <ul className="search-results" role="listbox">
+          <li className="search-empty">Escribe las 5 cifras del número de tren.</li>
+        </ul>
+      )}
+
+      {mode === 'search' && !trainQuery && searchResults.length > 0 && (
         <ul className="search-results" role="listbox">
           {searchResults.map((s, i) => (
             <StopRow key={s.id} s={s} active={i === active} onPick={() => pick(s)} />

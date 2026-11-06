@@ -1,4 +1,4 @@
-import type { Line, Stop } from '@renfe/shared';
+import type { Line, Stop, TrainMatch } from '@renfe/shared';
 import { useEffect, useMemo, useState } from 'react';
 import { InstallHint } from './components/InstallHint';
 import { MapView } from './components/MapView';
@@ -61,6 +61,16 @@ export function App() {
     if (fly) setFocus({ lat: s.lat, lon: s.lon, key: Date.now() });
   };
 
+  // Desde el buscador por número: abre su estación y lo sigue (si va en marcha o sale pronto).
+  const selectTrain = (t: TrainMatch) => {
+    const stop = byId.get(t.stopId);
+    if (!stop) return;
+    track('buscar-tren', { linea: t.line.name, red: t.network });
+    select(stop, true);
+    const soon = t.state === 'running' || t.departure - Date.now() < 90 * 60_000;
+    setTracked(soon ? { tripId: t.tripId, line: t.line } : null);
+  };
+
   return (
     <div className={`app${selected ? ' has-panel' : ''}`}>
       <MapView
@@ -77,7 +87,12 @@ export function App() {
         route={tracked && routePath.length > 1 ? { path: routePath, color: tracked.line.color } : null}
       />
       <div className="overlay">
-        <StopSearch stops={stops} favorites={favoriteStops} onSelect={(s) => select(s, true)} />
+        <StopSearch
+          stops={stops}
+          favorites={favoriteStops}
+          onSelect={(s) => select(s, true)}
+          onSelectTrain={selectTrain}
+        />
         {!selected && <InstallHint />}
         {loadError && stops.length === 0 && (
           <div className="toast">Conectando con el servidor… la primera carga puede tardar hasta un minuto.</div>
