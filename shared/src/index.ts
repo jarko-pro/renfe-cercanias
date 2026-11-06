@@ -108,5 +108,7 @@ export interface HealthResponse {
   realtimeTrips: number;
   vehicles: number;
   alerts: number;
+  /** Histórico de retrasos: viajes en curso, guardados y último error de la base de datos. */
+  history?: { enabled: boolean; pending: number; saved: number; lastError: string | null };
   error?: string;
 }

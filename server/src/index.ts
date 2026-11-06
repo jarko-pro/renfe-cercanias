@@ -13,6 +13,7 @@ import { createRealtimePoller } from './realtime/poller.js';
 import { createVehiclePoller } from './realtime/vehicles.js';
 import { tripPath } from './shape.js';
 import { registerStats } from './stats.js';
+import { createHistory } from './history/index.js';
 import { localDate } from './time.js';
 
 const PORT = Number(process.env.PORT ?? 3001);
@@ -67,6 +68,12 @@ const realtime = createRealtimePoller(RT_INTERVAL_MS, (m) => app.log.warn(m));
 const positions = createVehiclePoller(VP_INTERVAL_MS, (m) => app.log.warn(m));
 // Los avisos cambian poco: cada 2 min basta.
 const alerts = createAlertsPoller(2 * 60_000, (m) => app.log.warn(m));
+// Histórico de retrasos (Postgres en DATABASE_URL). Cada 10 s mira si hay una lectura nueva del feed.
+const history = createHistory(process.env.DATABASE_URL, () => gtfs, {
+  info: (m) => app.log.info(m),
+  warn: (m) => app.log.warn(m),
+});
+setInterval(() => history.observe(realtime.state, positions.state.vehicles), 10_000);
 
 // Render (plan gratuito) duerme el servidor tras 15 min sin tráfico entrante. Llamar a
 // nuestra propia URL pública sale a internet y vuelve a entrar por Render, así que cuenta
@@ -94,6 +101,7 @@ app.get('/api/health', { logLevel: 'warn' }, async (): Promise<HealthResponse> =
   realtimeTrips: realtime.state.trips.size,
   vehicles: positions.state.vehicles.size,
   alerts: alerts.state.alerts.length,
+  history: { ...history.status },
   ...(gtfsError ? { error: gtfsError } : {}),
 }));
 
