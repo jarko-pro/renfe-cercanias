@@ -4,8 +4,37 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <meta name="theme-color" content="#8a0b3a" />
-    <meta name="description" content="Cuánto le falta a cada tren de Cercanías para llegar a tu estación, en tiempo real." />
-    <title>Cercanías en directo</title>
+    <title>Cercanías en directo · Próximos trenes y retrasos en tiempo real</title>
+    <meta
+      name="description"
+      content="Cuánto le falta a tu tren de Cercanías, con retraso, andén y avisos en tiempo real. Madrid, Rodalies, Valencia, Sevilla, Málaga, Bilbao y más. Gratis y sin registro."
+    />
+    <link rel="canonical" href="https://cercaniasendirecto.com/" />
+
+    <!-- Vista previa al compartir el enlace (WhatsApp, Telegram, redes) -->
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="Cercanías en directo" />
+    <meta property="og:locale" content="es_ES" />
+    <meta property="og:url" content="https://cercaniasendirecto.com/" />
+    <meta property="og:title" content="Cercanías en directo" />
+    <meta property="og:description" content="Cuánto le falta a tu tren de Cercanías, con retraso y andén, en tiempo real." />
+    <meta property="og:image" content="https://cercaniasendirecto.com/icon-512.png" />
+    <meta name="twitter:card" content="summary" />
+
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@type": "WebApplication",
+        "name": "Cercanías en directo",
+        "url": "https://cercaniasendirecto.com/",
+        "description": "Próximos trenes de Cercanías en tiempo real: cuánto falta, retraso, andén y avisos en cada estación.",
+        "applicationCategory": "TravelApplication",
+        "operatingSystem": "Web, Android, iOS",
+        "inLanguage": "es",
+        "isAccessibleForFree": true,
+        "offers": { "@type": "Offer", "price": "0", "priceCurrency": "EUR" }
+      }
+    </script>
 
     <!-- Instalable como app (PWA) -->
     <link rel="manifest" href="./manifest.webmanifest" />
@@ -16,9 +45,84 @@
     <meta name="mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-title" content="Cercanías" />
     <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+
+    <!-- Pantalla de carga: se ve al instante, antes de que llegue el JS. React la sustituye. -->
+    <style>
+      html,
+      body {
+        margin: 0;
+        background: #fff;
+        color: #17171c;
+        font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+      }
+      .shell {
+        min-height: 100vh;
+        min-height: 100dvh;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 10px;
+        padding: 24px;
+        box-sizing: border-box;
+        text-align: center;
+      }
+      .shell h1 {
+        margin: 0;
+        font-size: 22px;
+        color: #8a0b3a;
+      }
+      .shell p {
+        margin: 0;
+        max-width: 340px;
+        font-size: 15px;
+        line-height: 1.45;
+        color: #5d5d6b;
+      }
+      .shell .loading::before {
+        content: '';
+        display: inline-block;
+        width: 12px;
+        height: 12px;
+        margin-right: 8px;
+        vertical-align: -1px;
+        border: 2px solid currentColor;
+        border-right-color: transparent;
+        border-radius: 50%;
+        animation: shell-spin 0.8s linear infinite;
+      }
+      @keyframes shell-spin {
+        to {
+          transform: rotate(360deg);
+        }
+      }
+      @media (prefers-color-scheme: dark) {
+        html,
+        body {
+          background: #111114;
+          color: #f1f1f4;
+        }
+        .shell h1 {
+          color: #f1f1f4;
+        }
+        .shell p {
+          color: #a3a3b0;
+        }
+      }
+    </style>
   </head>
   <body>
-    <div id="root"></div>
+    <div id="root">
+      <main class="shell">
+        <h1>Cercanías en directo</h1>
+        <p>
+          Cuánto le falta a cada tren de Cercanías para llegar a tu estación, con retraso, andén y avisos en
+          tiempo real.
+        </p>
+        <p class="loading">Cargando…</p>
+        <noscript><p>Necesitas activar JavaScript para ver los trenes.</p></noscript>
+      </main>
+    </div>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

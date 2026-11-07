@@ -1,7 +1,7 @@
 import type { Stop } from '@renfe/shared';
 import L from 'leaflet';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { CircleMarker, MapContainer, Marker, Pane, Polyline, TileLayer, Tooltip, useMap } from 'react-leaflet';
+import { CircleMarker, MapContainer, Marker, Pane, Polyline, TileLayer, Tooltip, useMap, useMapEvents } from 'react-leaflet';
 
 export interface TrainPosition {
   tripId: string;
@@ -9,6 +9,8 @@ export interface TrainPosition {
   lon: number;
   /** Color de la línea, hex sin '#'. */
   color: string;
+  /** Sin datos nuevos hace rato (p. ej. sin conexión): se pinta en gris. */
+  stale?: boolean;
 }
 
 interface Props {
@@ -25,6 +27,35 @@ interface Props {
 }
 
 const SPAIN: [number, number] = [40.2, -3.7];
+const VIEW_KEY = 'renfe:view:v1';
+
+/** Última vista del mapa guardada en el dispositivo; si no hay, España entera. */
+function initialView(): { center: [number, number]; zoom: number } {
+  try {
+    const v = JSON.parse(localStorage.getItem(VIEW_KEY) ?? 'null');
+    if (v && Number.isFinite(v.lat) && Number.isFinite(v.lon) && Number.isFinite(v.zoom)) {
+      return { center: [v.lat, v.lon], zoom: v.zoom };
+    }
+  } catch {
+    /* sin almacenamiento o dato corrupto */
+  }
+  return { center: SPAIN, zoom: 6 };
+}
+
+/** Guarda la vista cada vez que el mapa se para, para abrir ahí la próxima vez. */
+function RememberView() {
+  const map = useMapEvents({
+    moveend: () => {
+      const c = map.getCenter();
+      try {
+        localStorage.setItem(VIEW_KEY, JSON.stringify({ lat: c.lat, lon: c.lng, zoom: map.getZoom() }));
+      } catch {
+        /* modo privado: no se recuerda */
+      }
+    },
+  });
+  return null;
+}
 
 function FlyTo({ focus }: { focus: Props['focus'] }) {
   const map = useMap();
@@ -54,12 +85,12 @@ function TrainMarker({ train }: { train: TrainPosition }) {
   const icon = useMemo(
     () =>
       L.divIcon({
-        className: 'train-marker',
+        className: `train-marker${train.stale ? ' stale' : ''}`,
         html: `<span style="--line:#${train.color}">${TRAIN_SVG}</span>`,
         iconSize: [34, 34],
         iconAnchor: [17, 17],
       }),
-    [train.color],
+    [train.color, train.stale],
   );
 
   useEffect(() => {
@@ -174,10 +205,11 @@ export function MapView({ stops, selectedId, favoriteIds, focus, onSelect, train
   const selectedStop = useMemo(() => stops.find((s) => s.id === selectedId), [stops, selectedId]);
   const [userPos, setUserPos] = useState<[number, number] | null>(null);
   const [locFocus, setLocFocus] = useState<Props['focus']>(null);
+  const [view] = useState(initialView);
 
   return (
     <div className="map-wrap">
-      <MapContainer center={SPAIN} zoom={6} preferCanvas zoomControl={false} className="map">
+      <MapContainer center={view.center} zoom={view.zoom} preferCanvas zoomControl={false} className="map">
         <TileLayer
           // Renfe exige citar la fuente ("Origen de los datos: Renfe Operadora") en sus datos abiertos.
           attribution='Origen de los datos: <a href="https://data.renfe.com/" target="_blank" rel="noopener">Renfe Operadora</a> · &copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a> · <a href="./privacidad.html">Privacidad</a>'
@@ -224,6 +256,7 @@ export function MapView({ stops, selectedId, favoriteIds, focus, onSelect, train
         <FitTrain train={train} stop={selectedStop} />
         <FlyTo focus={focus} />
         <FlyTo focus={locFocus} />
+        <RememberView />
       </MapContainer>
       <LocateButton
         onLocated={(lat, lon) => {

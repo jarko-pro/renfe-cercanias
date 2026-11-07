@@ -6,6 +6,8 @@ import { LineChip } from './LineChip';
 
 const REFRESH_MS = 30_000;
 const RETRY_MS = 4_000;
+/** Sin una respuesta buena en este tiempo, la lista se da por vieja y se pinta en gris. */
+const STALE_MS = 90_000;
 const MAX_ROWS = 12;
 
 type Tab = 'departures' | 'arrivals';
@@ -221,6 +223,8 @@ function ArrivalRow({ a, now, live, onTrack }: RowProps) {
 export function StopPanel({ stop, isFavorite, onToggleFavorite, onClose, tracked, onTrack }: Props) {
   const [data, setData] = useState<ArrivalsResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // Cuándo llegó la última respuesta buena (reloj del móvil, no del servidor).
+  const [receivedAt, setReceivedAt] = useState(0);
   const [loading, setLoading] = useState(true);
   const [waking, setWaking] = useState(false);
   const [tab, setTab] = useState<Tab>('departures');
@@ -247,6 +251,7 @@ export function StopPanel({ stop, isFavorite, onToggleFavorite, onClose, tracked
       try {
         const res = await fetchArrivals(stop.id, ctrl.signal);
         setData(res);
+        setReceivedAt(Date.now());
         setError(null);
         setWaking(false);
       } catch (e) {
@@ -273,6 +278,7 @@ export function StopPanel({ stop, isFavorite, onToggleFavorite, onClose, tracked
   }, [stop.id]);
 
   const now = useNow(TICK_MS);
+  const stale = !!data && now - receivedAt > STALE_MS;
   // Quita en vivo los trenes que ya han pasado, sin esperar al siguiente refresco.
   const all = useMemo(
     () => (data?.arrivals ?? []).filter((a) => a.estimated >= now - HIDE_AFTER_MS),
@@ -414,7 +420,7 @@ export function StopPanel({ stop, isFavorite, onToggleFavorite, onClose, tracked
         {error && !data && !waking && !loading && <p className="placeholder error">{error} · reintentando…</p>}
         {data && visible.length === 0 && <p className="placeholder">{emptyText}</p>}
         {data && visible.length > 0 && (
-          <ul className="arrivals" ref={listRef}>
+          <ul className={`arrivals${stale ? ' stale' : ''}`} ref={listRef}>
             {visible.map((a) => (
               <ArrivalRow
                 key={`${a.tripId}-${a.scheduled}`}
@@ -429,8 +435,9 @@ export function StopPanel({ stop, isFavorite, onToggleFavorite, onClose, tracked
       </div>
 
       {data && (
-        <footer className="panel-footer">
-          Actualizado a las {formatTime(data.generatedAt)}
+        <footer className={`panel-footer${stale ? ' stale' : ''}`}>
+          {stale ? 'Sin datos nuevos desde las ' : 'Actualizado a las '}
+          {formatTime(data.generatedAt)}
           {error && ' · sin conexión, reintentando'}
         </footer>
       )}

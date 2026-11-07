@@ -81,7 +81,7 @@ export function App() {
         onSelect={(s) => select(s, false)}
         train={
           tracked && live?.tripId === tracked.tripId && live.position
-            ? { tripId: tracked.tripId, ...live.position, color: tracked.line.color }
+            ? { tripId: tracked.tripId, ...live.position, color: tracked.line.color, stale: live.stale }
             : null
         }
         route={tracked && routePath.length > 1 ? { path: routePath, color: tracked.line.color } : null}

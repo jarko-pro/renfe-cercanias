@@ -788,3 +788,22 @@ button.arrival.following {
   align-items: center;
   gap: 8px;
 }
+
+/* Datos viejos (sin conexión hace rato): en gris para que no parezcan actuales. */
+.arrivals.stale {
+  opacity: 0.45;
+  filter: grayscale(1);
+  transition: opacity 0.3s;
+}
+.panel-footer.stale {
+  color: var(--warn);
+  background: var(--warn-bg);
+}
+.train-marker.stale span {
+  filter: grayscale(1);
+  opacity: 0.55;
+}
+.train-marker.stale span::after {
+  animation: none;
+  opacity: 0;
+}
