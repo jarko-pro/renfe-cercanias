@@ -807,3 +807,101 @@ button.arrival.following {
   animation: none;
   opacity: 0;
 }
+
+/* ---------- Ayuda ("?" dentro de la barra de búsqueda) ---------- */
+.search-field {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+  display: flex;
+}
+.search-field input {
+  padding-right: 48px;
+}
+.help-toggle {
+  position: absolute;
+  top: 50%;
+  right: 10px;
+  transform: translateY(-50%);
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 1.5px solid var(--border);
+  border-radius: 50%;
+  background: var(--surface);
+  color: var(--text-2);
+  font: 700 15px/1 system-ui, sans-serif;
+  cursor: pointer;
+  display: grid;
+  place-items: center;
+}
+.help-toggle:hover,
+.help-toggle.on {
+  background: var(--surface-2);
+  color: var(--text);
+  border-color: var(--text-2);
+}
+.help-toggle:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--brand);
+}
+.help-card {
+  padding: 14px 16px;
+  max-height: 70vh;
+  font-size: 14px;
+  line-height: 1.4;
+}
+.help-card h2 {
+  margin: 0 0 6px;
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-2);
+}
+.help-card h2:not(:first-child) {
+  margin-top: 14px;
+}
+.search-results .help-steps {
+  margin: 0;
+  padding-left: 18px;
+}
+.search-results .help-steps li {
+  padding: 2px 0;
+  border-radius: 0;
+  cursor: default;
+}
+.search-results .help-steps li:hover {
+  background: none;
+}
+.help-star {
+  color: #e8a600;
+}
+.help-legend {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 8px 12px;
+  align-items: baseline;
+  margin: 0;
+}
+.help-legend dt {
+  white-space: nowrap;
+  font-weight: 600;
+  font-size: 13px;
+}
+.help-legend dd {
+  margin: 0;
+  color: var(--text-2);
+}
+.help-grey {
+  opacity: 0.45;
+  filter: grayscale(1);
+}
+.help-foot {
+  margin: 14px 0 0;
+  font-size: 12px;
+  color: var(--text-2);
+}
+.help-foot a {
+  color: inherit;
+}

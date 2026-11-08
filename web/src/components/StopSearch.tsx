@@ -2,7 +2,9 @@ import type { Stop, TrainMatch } from '@renfe/shared';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { fetchTrains, isAbort } from '../lib/api';
 import { formatTime, normalize } from '../lib/text';
+import { HelpCard } from './HelpCard';
 import { LineChip } from './LineChip';
+import { track } from '../lib/analytics';
 
 interface Props {
   stops: Stop[];
@@ -15,7 +17,7 @@ interface Props {
 const TRAIN_RE = /^\d{5}$/;
 
 /** Qué lista está desplegada bajo la barra. */
-type Mode = 'closed' | 'search' | 'favorites';
+type Mode = 'closed' | 'search' | 'favorites' | 'help';
 
 function StopRow({ s, active, onPick }: { s: Stop; active: boolean; onPick: () => void }) {
   return (
@@ -148,20 +150,34 @@ export function StopSearch({ stops, favorites, onSelect, onSelectTrain }: Props)
   return (
     <div className="search" ref={rootRef} onKeyDown={onKeyDown}>
       <div className="search-bar">
-        <input
-          ref={inputRef}
-          type="search"
-          placeholder="Buscar estación o nº de tren…"
-          value={query}
-          aria-label="Buscar estación o número de tren"
-          aria-expanded={mode === 'search' && searchResults.length > 0}
-          onChange={(e) => {
-            setQuery(e.target.value);
-            setActive(0);
-            setMode('search');
-          }}
-          onFocus={() => query.trim() && setMode('search')}
-        />
+        <div className="search-field">
+          <input
+            ref={inputRef}
+            type="search"
+            placeholder="Buscar estación o nº de tren…"
+            value={query}
+            aria-label="Buscar estación o número de tren"
+            aria-expanded={mode === 'search' && searchResults.length > 0}
+            onChange={(e) => {
+              setQuery(e.target.value);
+              setActive(0);
+              setMode('search');
+            }}
+            onFocus={() => query.trim() && setMode('search')}
+          />
+          <button
+            className={`help-toggle${mode === 'help' ? ' on' : ''}`}
+            aria-label="Cómo funciona"
+            aria-expanded={mode === 'help'}
+            title="Cómo funciona"
+            onClick={() => {
+              if (mode !== 'help') track('ayuda');
+              setMode(mode === 'help' ? 'closed' : 'help');
+            }}
+          >
+            ?
+          </button>
+        </div>
         <button
           className={`fav-toggle${favOpen ? ' on' : ''}`}
           aria-label="Estaciones favoritas"
@@ -184,6 +200,8 @@ export function StopSearch({ stops, favorites, onSelect, onSelectTrain }: Props)
           {favorites.length > 0 && <span className="fav-count">{favorites.length}</span>}
         </button>
       </div>
+
+      {mode === 'help' && <HelpCard />}
 
       {trainMode && (
         <ul className="search-results" role="listbox" aria-label={`Tren ${trainQuery}`}>
