@@ -129,3 +129,5 @@ export interface TrainMatch {
   /** Salida programada del origen (epoch ms). */
   departure: number;
 }
+
+export * from './slug';

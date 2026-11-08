@@ -1,5 +1,6 @@
 import type { Line, Stop, TrainMatch } from '@renfe/shared';
-import { useEffect, useMemo, useState } from 'react';
+import { slugFromPath, stopPath, stopSlugs } from '@renfe/shared';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { InstallHint } from './components/InstallHint';
 import { MapView } from './components/MapView';
 import { StopPanel } from './components/StopPanel';
@@ -8,6 +9,8 @@ import { fetchStops, readCachedStops, writeCachedStops } from './lib/api';
 import { track } from './lib/analytics';
 import { useFavorites } from './lib/favorites';
 import { useTripLive, useTripShape } from './lib/useTripLive';
+
+const BASE_TITLE = 'Cercanías en directo · Próximos trenes y retrasos en tiempo real';
 
 export function App() {
   // Arranca con la copia guardada: el mapa y las favoritas funcionan aunque el servidor duerma.
@@ -46,20 +49,39 @@ export function App() {
   }, []);
 
   const byId = useMemo(() => new Map(stops.map((s) => [s.id, s])), [stops]);
+  const slugs = useMemo(() => stopSlugs(stops), [stops]);
   const favoriteStops = useMemo(
     () => favorites.ids.map((id) => byId.get(id)).filter((s): s is Stop => !!s),
     [favorites.ids, byId],
   );
 
-  const select = (s: Stop, fly: boolean) => {
+  const select = (s: Stop, fly: boolean, from?: string) => {
     if (s.id !== selected?.id) {
       setTracked(null);
       // `fly` = elegida en el buscador o en favoritas; si no, tocando el mapa.
-      track('estacion', { estacion: s.name, red: s.network, desde: fly ? 'buscador' : 'mapa' });
+      track('estacion', { estacion: s.name, red: s.network, desde: from ?? (fly ? 'buscador' : 'mapa') });
     }
     setSelected(s);
     if (fly) setFocus({ lat: s.lat, lon: s.lon, key: Date.now() });
   };
+
+  // Entrando por la página de una estación (/estacion/atocha/), se abre su panel.
+  const fromUrl = useRef(slugFromPath(location.pathname));
+  useEffect(() => {
+    if (!fromUrl.current || stops.length === 0) return;
+    const stop = stops.find((s) => slugs.get(s.id) === fromUrl.current);
+    fromUrl.current = null;
+    if (stop) select(stop, true, 'enlace');
+  }, [stops, slugs]);
+
+  // La dirección sigue a la estación abierta, para poder compartirla o guardarla.
+  useEffect(() => {
+    if (!location.protocol.startsWith('http') || fromUrl.current) return;
+    const slug = selected ? slugs.get(selected.id) : null;
+    const path = slug ? stopPath(slug) : '/';
+    if (location.pathname !== path) history.replaceState(null, '', path + location.search);
+    document.title = selected ? `${selected.name} · Cercanías en directo` : BASE_TITLE;
+  }, [selected, slugs]);
 
   // Desde el buscador por número: abre su estación y lo sigue (si va en marcha o sale pronto).
   const selectTrain = (t: TrainMatch) => {
