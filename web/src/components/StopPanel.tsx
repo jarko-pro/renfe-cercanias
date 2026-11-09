@@ -114,6 +114,15 @@ interface RowProps {
   onTrack: (a: Arrival) => void;
 }
 
+/** Color del retraso: verde en hora, verde amarillento 1-2 min, amarillo 3-5, naranja 6-10, rojo más. */
+export function delayClass(min: number): string {
+  if (min <= 0) return 'd0';
+  if (min <= 2) return 'd1';
+  if (min <= 5) return 'd2';
+  if (min <= 10) return 'd3';
+  return 'd4';
+}
+
 function ArrivalRow({ a, now, live, onTrack }: RowProps) {
   const delayMin = a.delaySec != null ? Math.round(a.delaySec / 60) : 0;
   const minutes = minutesUntil(a.estimated, now);
@@ -165,13 +174,13 @@ function ArrivalRow({ a, now, live, onTrack }: RowProps) {
             {a.cancelled ? (
               <span className="badge danger">Cancelado</span>
             ) : a.realtime ? (
-              <span className="badge live" title="Dato en tiempo real">
+              <span className={`badge live ${delayClass(delayMin)}`} title="Dato en tiempo real">
                 <span className="dot" />
                 {delayMin > 0 ? `+${delayMin} min` : 'En hora'}
               </span>
             ) : a.unconfirmed ? (
               <span
-                className="badge warn"
+                className="badge unconfirmed"
                 title="Renfe no da datos en tiempo real de este tren: puede ir con retraso o estar cancelado"
               >
                 Sin confirmar

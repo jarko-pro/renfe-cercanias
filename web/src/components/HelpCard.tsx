@@ -26,17 +26,21 @@ export function HelpCard() {
 
       <h2>Qué significa cada cosa</h2>
       <dl className="help-legend">
-        <dt>
-          <span className="badge live">
-            <span className="dot" />
-            En hora
-          </span>{' '}
-          <span className="badge live">
-            <span className="dot" />
-            +3 min
-          </span>
+        <dt className="help-scale">
+          {[
+            ['d0', 'En hora'],
+            ['d1', '+2'],
+            ['d2', '+4'],
+            ['d3', '+8'],
+            ['d4', '+15'],
+          ].map(([c, t]) => (
+            <span key={c} className={`badge live ${c}`}>
+              <span className="dot" />
+              {t}
+            </span>
+          ))}
         </dt>
-        <dd>Dato en tiempo real de Renfe: el tren va en hora o con ese retraso.</dd>
+        <dd className="help-scale">Dato en tiempo real de Renfe: el tren va en hora o con esos minutos de retraso. Del verde al rojo según cuánto se retrasa.</dd>
 
         <dt>
           <span className="badge muted">Programado</span>
@@ -44,7 +48,7 @@ export function HelpCard() {
         <dd>Renfe no da datos en directo de este tren todavía: es la hora del horario.</dd>
 
         <dt>
-          <span className="badge warn">Sin confirmar</span>
+          <span className="badge unconfirmed">Sin confirmar</span>
         </dt>
         <dd>Ya debería estar circulando, pero Renfe no da señal. Puede ir con retraso o estar cancelado.</dd>
 

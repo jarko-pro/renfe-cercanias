@@ -8,7 +8,12 @@
   --border: #e3e3e8;
   --live: #0f8a4a;
   --live-bg: #e3f6ec;
-  --late: #b45309;
+  --d1: #4d7c0f;
+  --d1-bg: #eef7d9;
+  --d2: #a16207;
+  --d2-bg: #fdf6c8;
+  --d3: #c2410c;
+  --d3-bg: #ffedd5;
   --danger: #c0262d;
   --danger-bg: #fdeaea;
   --warn: #a15c07;
@@ -28,7 +33,12 @@
     --border: #33333c;
     --live: #4ade80;
     --live-bg: #12301f;
-    --late: #fbbf24;
+    --d1: #a3e635;
+    --d1-bg: #232f0f;
+    --d2: #facc15;
+    --d2-bg: #332e0b;
+    --d3: #fb923c;
+    --d3-bg: #3a210f;
     --danger: #f87171;
     --danger-bg: #3a1618;
     --warn: #fbbf24;
@@ -440,9 +450,28 @@ body {
   background: var(--live-bg);
   color: var(--live);
 }
-.badge.warn {
-  background: var(--warn-bg);
-  color: var(--warn);
+/* Escala de retraso: de verde (en hora) a rojo (más de 10 min). */
+.badge.live.d1 {
+  background: var(--d1-bg);
+  color: var(--d1);
+}
+.badge.live.d2 {
+  background: var(--d2-bg);
+  color: var(--d2);
+}
+.badge.live.d3 {
+  background: var(--d3-bg);
+  color: var(--d3);
+}
+.badge.live.d4 {
+  background: var(--danger-bg);
+  color: var(--danger);
+}
+/* Gris como "Programado", con borde discontinuo: no hay dato, no es un retraso. */
+.badge.unconfirmed {
+  background: transparent;
+  border: 1px dashed var(--text-2);
+  padding: 0 6px;
 }
 .badge.danger {
   background: var(--danger-bg);
@@ -892,6 +921,18 @@ button.arrival.following {
 .help-legend dd {
   margin: 0;
   color: var(--text-2);
+}
+/* La escala de retrasos ocupa su propia fila: no cabe al lado del texto en el móvil. */
+.help-legend .help-scale {
+  grid-column: 1 / -1;
+}
+.help-legend dt.help-scale {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+.help-legend dd.help-scale {
+  margin-top: -4px;
 }
 .help-grey {
   opacity: 0.45;
