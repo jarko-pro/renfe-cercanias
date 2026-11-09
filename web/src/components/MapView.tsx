@@ -153,7 +153,8 @@ function FitTrain({ train, stop }: { train: TrainPosition | null; stop: Stop | u
       ],
       {
         paddingTopLeft: mobile ? [40, 90] : [420, 40],
-        paddingBottomRight: mobile ? [40, window.innerHeight * 0.58 + 40] : [40, 40],
+        // En el móvil el panel se reduce a la fila del tren seguido (unos 130 px).
+        paddingBottomRight: mobile ? [40, 190] : [40, 40],
         maxZoom: 15,
         duration: 0.8,
       },

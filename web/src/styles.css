@@ -423,10 +423,12 @@ body {
   overflow: hidden;
   text-overflow: ellipsis;
 }
+/* Siempre en un renglón: si no cabe, se recorta "dónde va" y, en último caso, el final. */
 .arrival-sub {
   display: flex;
   align-items: center;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
+  overflow: hidden;
   gap: 6px;
   margin-top: 3px;
   font-size: 13px;
@@ -631,6 +633,39 @@ body {
   .has-panel .locate-btn {
     bottom: calc(58vh + 12px);
   }
+  /* Sin sitio para la hora tachada: la etiqueta "+N min" ya dice que va con retraso. */
+  .sched s {
+    display: none;
+  }
+  /* Siguiendo un tren: el panel se queda solo con su fila y el mapa ocupa el resto. */
+  .panel.compact > :not(.compact-train) {
+    display: none;
+  }
+  .tracking .locate-btn {
+    bottom: calc(140px + env(safe-area-inset-bottom));
+  }
+}
+/* La versión compacta solo existe en el móvil. */
+@media (min-width: 641px) {
+  .compact-train {
+    display: none;
+  }
+}
+.show-all {
+  display: block;
+  width: 100%;
+  padding: 10px 16px;
+  border: none;
+  border-top: 1px solid var(--border);
+  background: var(--surface-2);
+  color: var(--text-2);
+  font: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.show-all span {
+  margin-right: 4px;
 }
 
 /* ---------- Tren seguido ---------- */
@@ -658,6 +693,7 @@ button.arrival:disabled {
 /* Icono "se puede ver en directo": discreto en reposo, verde y latiendo al seguirlo. */
 .live-pin {
   flex: none;
+  align-self: center;
   color: var(--text-2);
   opacity: 0.75;
 }
@@ -674,13 +710,39 @@ button.arrival:focus-visible {
   outline: 2px solid var(--brand);
   outline-offset: -2px;
 }
+/* Tren seguido: fondo normal y una barra con el color de su retraso. */
 button.arrival.following {
-  background: var(--live-bg);
-  box-shadow: inset 3px 0 0 var(--live);
+  box-shadow: inset 4px 0 0 var(--bar);
+}
+button.arrival.following.d0 {
+  --bar: var(--live);
+}
+button.arrival.following.d1 {
+  --bar: var(--d1);
+}
+button.arrival.following.d2 {
+  --bar: var(--d2);
+}
+button.arrival.following.d3 {
+  --bar: var(--d3);
+}
+button.arrival.following.d4 {
+  --bar: var(--danger);
+}
+button.arrival.following.dx {
+  --bar: var(--text-2);
 }
 .where {
-  color: var(--live);
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text);
   font-weight: 600;
+}
+.arrival-sub > :not(.where) {
+  flex: none;
 }
 .badge.platform {
   background: var(--surface-2);

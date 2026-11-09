@@ -94,7 +94,7 @@ export function App() {
   };
 
   return (
-    <div className={`app${selected ? ' has-panel' : ''}`}>
+    <div className={`app${selected ? ' has-panel' : ''}${selected && tracked ? ' tracking' : ''}`}>
       <MapView
         stops={stops}
         selectedId={selected?.id ?? null}

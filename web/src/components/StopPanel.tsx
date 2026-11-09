@@ -112,6 +112,8 @@ interface RowProps {
   /** undefined = no se sigue este tren; null = se sigue pero aún no hay posición. */
   live: TripLive | null | undefined;
   onTrack: (a: Arrival) => void;
+  /** Tarjeta del tren seguido en el móvil: el icono va junto al destino en vez de abajo. */
+  compact?: boolean;
 }
 
 /** Color del retraso: verde en hora, verde amarillento 1-2 min, amarillo 3-5, naranja 6-10, rojo más. */
@@ -123,7 +125,7 @@ export function delayClass(min: number): string {
   return 'd4';
 }
 
-function ArrivalRow({ a, now, live, onTrack }: RowProps) {
+function ArrivalRow({ a, now, live, onTrack, compact = false }: RowProps) {
   const delayMin = a.delaySec != null ? Math.round(a.delaySec / 60) : 0;
   const minutes = minutesUntil(a.estimated, now);
   const following = live !== undefined;
@@ -146,12 +148,21 @@ function ArrivalRow({ a, now, live, onTrack }: RowProps) {
     : atPlatform && eta == null
       ? 'En andén'
       : null;
+  const pin = (a.hasPosition || following) && !a.cancelled && (
+    <svg className="live-pin" viewBox="0 0 24 24" width="15" height="15" aria-label="Se puede ver en directo">
+      <path
+        fill="currentColor"
+        d="M12 2a7 7 0 0 0-7 7c0 5.2 7 13 7 13s7-7.8 7-13a7 7 0 0 0-7-7Zm0 9.5a2.5 2.5 0 1 1 0-5 2.5 2.5 0 0 1 0 5Z"
+      />
+    </svg>
+  );
   // Dentro de un <button> solo vale contenido "en línea": spans con display por CSS.
   return (
     <li className="arrival-item">
       <button
         type="button"
-        className={`arrival${a.cancelled ? ' cancelled' : ''}${following ? ' following' : ''}`}
+        // Al seguirlo, una barra a la izquierda con el color del retraso (gris sin dato en directo).
+        className={`arrival${a.cancelled ? ' cancelled' : ''}${following ? ` following ${a.realtime ? delayClass(delayMin) : 'dx'}` : ''}`}
         // Solo se pueden seguir los trenes de los que Renfe publica la posición.
         disabled={a.cancelled || (!a.hasPosition && !following)}
         aria-pressed={following}
@@ -164,6 +175,7 @@ function ArrivalRow({ a, now, live, onTrack }: RowProps) {
         <span className="arrival-main">
           <span className="headsign-line">
             <span className="headsign">{a.headsign || 'Destino desconocido'}</span>
+            {compact && pin}
             {a.trainNumber && (
               <span className="train-no" title="Número de tren">
                 nº {a.trainNumber}
@@ -204,14 +216,7 @@ function ArrivalRow({ a, now, live, onTrack }: RowProps) {
               </span>
             )}
             {platformText && !a.cancelled && <span className="badge platform">{platformText}</span>}
-            {(a.hasPosition || following) && !a.cancelled && (
-              <svg className="live-pin" viewBox="0 0 24 24" width="15" height="15" aria-label="Se puede ver en directo">
-                <path
-                  fill="currentColor"
-                  d="M12 2a7 7 0 0 0-7 7c0 5.2 7 13 7 13s7-7.8 7-13a7 7 0 0 0-7-7Zm0 9.5a2.5 2.5 0 1 1 0-5 2.5 2.5 0 0 1 0 5Z"
-                />
-              </svg>
-            )}
+            {!compact && pin}
           </span>
         </span>
         <span className={`eta${a.unconfirmed ? ' unsure' : ''}`}>
@@ -323,6 +328,11 @@ export function StopPanel({ stop, isFavorite, onToggleFavorite, onClose, tracked
     listRef.current?.querySelector('.following')?.scrollIntoView({ block: 'nearest' });
   }, [trackedId, fresh, showTabs, trackedArrives, tab]);
 
+  // En el móvil, al seguir un tren el panel se reduce a su fila para dejar sitio al mapa
+  // (por CSS: en escritorio hay espacio y se ve la lista entera). Se busca en toda la lista,
+  // no solo en la visible: el tren puede quedar fuera por el filtro de línea o la pestaña.
+  const trackedArrival = fresh && trackedId ? all.find((a) => a.tripId === trackedId) : undefined;
+
   const alerts = data?.alerts ?? [];
   // Franja arriba solo para lo grave que afecta a esta estación; lo demás, detrás del botón.
   const banner = alerts.find((a) => a.severe && a.here);
@@ -338,7 +348,7 @@ export function StopPanel({ stop, isFavorite, onToggleFavorite, onClose, tracked
       : 'No hay trenes previstos en los próximos 90 minutos.';
 
   return (
-    <section className="panel" aria-label={`Próximos trenes en ${stop.name}`}>
+    <section className={`panel${trackedArrival ? ' compact' : ''}`} aria-label={`Próximos trenes en ${stop.name}`}>
       <header className="panel-header">
         <div className="panel-title">
           <h2>{stop.name}</h2>
@@ -411,6 +421,17 @@ export function StopPanel({ stop, isFavorite, onToggleFavorite, onClose, tracked
           </div>
         )}
       </div>
+
+      {trackedArrival && (
+        <div className="compact-train">
+          <ul className="arrivals">
+            <ArrivalRow a={trackedArrival} now={now} live={tracked?.live ?? null} onTrack={onTrack} compact />
+          </ul>
+          <button className="show-all" onClick={() => onTrack(null)}>
+            <span aria-hidden="true">˄</span> Ver todos los trenes
+          </button>
+        </div>
+      )}
 
       <div className="panel-body">
         {!data && (loading || waking) && (
