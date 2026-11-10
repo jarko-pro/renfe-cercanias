@@ -2,6 +2,7 @@ import type { Line, Stop, TrainMatch } from '@renfe/shared';
 import { slugFromPath, stopPath, stopSlugs } from '@renfe/shared';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { InstallHint } from './components/InstallHint';
+import { NoticeCard, useNotice } from './components/NoticeCard';
 import { MapView } from './components/MapView';
 import { StopPanel } from './components/StopPanel';
 import { StopSearch } from './components/StopSearch';
@@ -17,6 +18,7 @@ export function App() {
   const [stops, setStops] = useState<Stop[]>(() => readCachedStops() ?? []);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [selected, setSelected] = useState<Stop | null>(null);
+  const { notice, close: closeNotice } = useNotice();
   const [focus, setFocus] = useState<{ lat: number; lon: number; key: number } | null>(null);
   const favorites = useFavorites();
   // Tren que se sigue en el mapa (solo uno, y solo mientras el panel de su estación está abierto).
@@ -115,7 +117,8 @@ export function App() {
           onSelect={(s) => select(s, true)}
           onSelectTrain={selectTrain}
         />
-        {!selected && <InstallHint />}
+        {notice && <NoticeCard notice={notice} onClose={closeNotice} />}
+        {!selected && !notice && <InstallHint />}
         {loadError && stops.length === 0 && (
           <div className="toast">Conectando con el servidor… la primera carga puede tardar hasta un minuto.</div>
         )}

@@ -1008,3 +1008,34 @@ button.arrival.following.dx {
 .help-foot a {
   color: inherit;
 }
+
+/* Aviso general al abrir (huelgas, cortes…). Mismo formato que install-hint, en ámbar. */
+.notice-card {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 10px 6px 10px 12px;
+  border-radius: var(--radius);
+  background: var(--warn-bg);
+  color: var(--text);
+  box-shadow: var(--shadow);
+}
+.notice-icon {
+  flex: none;
+  color: var(--warn);
+  font-size: 18px;
+  line-height: 1.3;
+}
+.notice-text {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: 13px;
+  line-height: 1.35;
+}
+.notice-text strong {
+  font-size: 14px;
+  color: var(--warn);
+}
