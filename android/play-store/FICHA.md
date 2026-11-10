@@ -127,7 +127,7 @@ Coherente con la política de privacidad (estadísticas anónimas con Umami).
 **Recogida y seguridad**
 - ¿Recoge o comparte datos de usuario de los tipos requeridos? → **Sí**
 - ¿Se cifran todos los datos en tránsito? → **Sí** (todo va por HTTPS)
-- ¿Cómo pueden solicitar la eliminación? marca que los usuarios **pueden solicitar que se eliminen sus datos** e indica el correo `contacto@cercaniasendirecto.com` (no hay cuentas).
+- ¿Cómo pueden solicitar la eliminación? URL: `https://cercaniasendirecto.com/privacidad.html#borrar-datos` (no hay cuentas; ahí se explica cómo pedirlo por correo).
 
 **Tipos de datos: marca solo estos**
 
