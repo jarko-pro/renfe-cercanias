@@ -114,6 +114,11 @@ export function App() {
         <StopSearch
           stops={stops}
           favorites={favoriteStops}
+          isFavorite={favorites.isFavorite}
+          onToggleFavorite={(s) => {
+            if (!favorites.isFavorite(s.id)) track('favorita', { estacion: s.name });
+            favorites.toggle(s.id);
+          }}
           onSelect={(s) => select(s, true)}
           onSelectTrain={selectTrain}
         />

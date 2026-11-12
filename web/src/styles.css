@@ -184,6 +184,36 @@ body {
 .search-results li:hover {
   background: var(--surface-2);
 }
+/* Favoritas: estrella a la derecha de la fila para quitarla sin abrir la estación. */
+.search-results li.with-star {
+  position: relative;
+  padding-right: 52px;
+}
+.search-results li.removed .result-name,
+.search-results li.removed .result-meta {
+  opacity: 0.45;
+}
+.row-star {
+  position: absolute;
+  top: 50%;
+  right: 4px;
+  transform: translateY(-50%);
+  width: 44px;
+  height: 44px;
+  border: none;
+  border-radius: 999px;
+  background: none;
+  color: var(--text-2);
+  font-size: 22px;
+  line-height: 1;
+  cursor: pointer;
+}
+.row-star.on {
+  color: #e8a600;
+}
+.row-star:hover {
+  background: var(--surface);
+}
 .search-results .search-heading {
   cursor: default;
   font-size: 12px;

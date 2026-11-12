@@ -9,6 +9,8 @@ import { track } from '../lib/analytics';
 interface Props {
   stops: Stop[];
   favorites: Stop[];
+  isFavorite: (id: string) => boolean;
+  onToggleFavorite: (stop: Stop) => void;
   onSelect: (stop: Stop) => void;
   onSelectTrain: (train: TrainMatch) => void;
 }
@@ -19,15 +21,40 @@ const TRAIN_RE = /^\d{5}$/;
 /** Qué lista está desplegada bajo la barra. */
 type Mode = 'closed' | 'search' | 'favorites' | 'help';
 
-function StopRow({ s, active, onPick }: { s: Stop; active: boolean; onPick: () => void }) {
+function StopRow({
+  s,
+  active,
+  onPick,
+  fav,
+}: {
+  s: Stop;
+  active: boolean;
+  onPick: () => void;
+  /** En la lista de favoritas: estrella para quitarla (o volver a ponerla) sin abrir la estación. */
+  fav?: { on: boolean; toggle: () => void };
+}) {
   return (
     <li
       role="option"
       aria-selected={active}
-      className={active ? 'active' : ''}
+      className={[active ? 'active' : '', fav ? 'with-star' : '', fav && !fav.on ? 'removed' : ''].join(' ').trim()}
       onMouseDown={(e) => e.preventDefault()}
       onClick={onPick}
     >
+      {fav && (
+        <button
+          className={`row-star${fav.on ? ' on' : ''}`}
+          aria-pressed={fav.on}
+          aria-label={fav.on ? `Quitar ${s.name} de favoritas` : `Volver a añadir ${s.name} a favoritas`}
+          title={fav.on ? 'Quitar de favoritas' : 'Añadir a favoritas'}
+          onClick={(e) => {
+            e.stopPropagation();
+            fav.toggle();
+          }}
+        >
+          {fav.on ? '★' : '☆'}
+        </button>
+      )}
       <div className="result-name">{s.name}</div>
       <div className="result-meta">
         <span>{s.network}</span>
@@ -68,7 +95,7 @@ function TrainRow({ t, active, onPick }: { t: TrainMatch; active: boolean; onPic
   );
 }
 
-export function StopSearch({ stops, favorites, onSelect, onSelectTrain }: Props) {
+export function StopSearch({ stops, favorites, isFavorite, onToggleFavorite, onSelect, onSelectTrain }: Props) {
   const [query, setQuery] = useState('');
   const [mode, setMode] = useState<Mode>('closed');
   const [active, setActive] = useState(0);
@@ -109,7 +136,10 @@ export function StopSearch({ stops, favorites, onSelect, onSelectTrain }: Props)
   }, [trainQuery]);
   const trainResults = trainQuery && trains?.q === trainQuery ? (trains.list ?? []) : [];
 
-  const results = mode === 'favorites' ? favorites : searchResults;
+  // Lo que se ve en la lista de favoritas: las que había al abrirla. Una quitada sigue (con ☆)
+  // hasta cerrar la lista, para poder deshacerlo tocando otra vez.
+  const [favShown, setFavShown] = useState<Stop[]>([]);
+  const results = mode === 'favorites' ? favShown : searchResults;
 
   // Cerrar al pulsar fuera.
   useEffect(() => {
@@ -185,6 +215,7 @@ export function StopSearch({ stops, favorites, onSelect, onSelectTrain }: Props)
           title="Estaciones favoritas"
           onClick={() => {
             setActive(0);
+            if (!favOpen) setFavShown(favorites);
             setMode(favOpen ? 'closed' : 'favorites');
           }}
         >
@@ -238,12 +269,20 @@ export function StopSearch({ stops, favorites, onSelect, onSelectTrain }: Props)
       {favOpen && (
         <ul className="search-results" role="listbox" aria-label="Estaciones favoritas">
           <li className="search-heading">Tus favoritas</li>
-          {favorites.length === 0 ? (
+          {favShown.length === 0 ? (
             <li className="search-empty">
               Aún no tienes favoritas. Abre una estación y pulsa ☆ para añadirla.
             </li>
           ) : (
-            favorites.map((s, i) => <StopRow key={s.id} s={s} active={i === active} onPick={() => pick(s)} />)
+            favShown.map((s, i) => (
+              <StopRow
+                key={s.id}
+                s={s}
+                active={i === active}
+                onPick={() => pick(s)}
+                fav={{ on: isFavorite(s.id), toggle: () => onToggleFavorite(s) }}
+              />
+            ))
           )}
         </ul>
       )}
