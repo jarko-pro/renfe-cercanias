@@ -4,6 +4,7 @@ import type { RealtimeState } from '../realtime/poller.js';
 import { localDate } from '../time.js';
 import { createCollector, type TrainRun } from './collector.js';
 import { insertRuns, migrate, purgeOld, type Db } from './db.js';
+import { loadInsights, type Insights } from './insights.js';
 
 const FLUSH_MS = 5 * 60_000;
 
@@ -12,6 +13,8 @@ export interface HistoryStatus {
   pending: number;
   saved: number;
   lastError: string | null;
+  /** Estadísticas de referencia cargadas (null si aún no hay). */
+  insights: { loadedAt: number; days: number; trains: number; trainStops: number; lines: number } | null;
 }
 
 /**
@@ -35,11 +38,32 @@ export function createHistory(
   pool?.on('error', (err) => log.warn(`Conexión con la base de datos perdida: ${err.message}`));
   const db: Db | null = pool;
   const collector = createCollector(Date.now());
-  const status: HistoryStatus = { enabled: !!db, pending: 0, saved: 0, lastError: null };
+  const status: HistoryStatus = { enabled: !!db, pending: 0, saved: 0, lastError: null, insights: null };
   let queue: TrainRun[] = [];
   let ready: Promise<void> | null = null;
   let lastFetch: number | null = null;
   let lastPurge = '';
+  let insights: Insights | null = null;
+  let insightsDay = '';
+  let insightsTry = 0;
+
+  /** Recalcula las estadísticas una vez al día (y al arrancar). Si falla, reintenta a los 30 min. */
+  async function refreshInsights(today: string, now: number) {
+    if (!db || insightsDay === today || now - insightsTry < 30 * 60_000) return;
+    insightsTry = now;
+    try {
+      const t0 = Date.now();
+      insights = await loadInsights(db, today, now);
+      insightsDay = today;
+      status.insights = { loadedAt: insights.loadedAt, days: insights.days, ...insights.counts() };
+      log.info(
+        `Estadísticas del histórico en ${((Date.now() - t0) / 1000).toFixed(1)} s: ${insights.days} días, ` +
+          `${status.insights.trains} trenes, ${status.insights.lines} franjas de línea`,
+      );
+    } catch (err) {
+      log.warn(`Error calculando estadísticas: ${(err as Error).message}`);
+    }
+  }
 
   function observe(rt: RealtimeState, vehicles: Map<string, unknown>) {
     const data = getData();
@@ -81,6 +105,7 @@ export function createHistory(
         await purgeOld(db);
         lastPurge = today;
       }
+      await refreshInsights(today, now);
       status.lastError = null;
     } catch (err) {
       ready = null;
@@ -92,5 +117,16 @@ export function createHistory(
   }
 
   const timer = setInterval(() => void flush(), FLUSH_MS);
-  return { observe, flush, status, stop: () => clearInterval(timer) };
+  // Al arrancar no se espera a la primera vuelta de 5 min para tener las estadísticas.
+  if (db) void (async () => {
+    try {
+      ready ??= migrate(db);
+      await ready;
+      await refreshInsights(localDate(Date.now()), Date.now());
+    } catch (err) {
+      ready = null;
+      log.warn(`Error preparando el histórico: ${(err as Error).message}`);
+    }
+  })();
+  return { observe, flush, status, insights: () => insights, stop: () => clearInterval(timer) };
 }

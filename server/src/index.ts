@@ -15,7 +15,8 @@ import { tripPath } from './shape.js';
 import { findTrains } from './trains.js';
 import { registerStats } from './stats.js';
 import { createHistory } from './history/index.js';
-import { localDate } from './time.js';
+import { dayType, lineAnomalies } from './history/insights.js';
+import { localDate, tzOffsetMs } from './time.js';
 
 const PORT = Number(process.env.PORT ?? 3001);
 const ZIP_PATH = fileURLToPath(new URL('../data/fomento_transit.zip', import.meta.url));
@@ -168,6 +169,25 @@ app.get<{ Params: { number: string } }>('/api/trains/:number', async (req, reply
   );
   reply.header('Cache-Control', 'no-store');
   return res;
+});
+
+// Provisional, para comprobar las estadísticas antes de llevarlas a la interfaz: qué líneas van
+// hoy peor de lo normal a esta hora. Solo cuenta los trenes que están circulando (con posición).
+app.get('/api/insights', async (_req, reply) => {
+  const ins = history.insights();
+  reply.header('Cache-Control', 'no-store');
+  if (!gtfs || !ins) return { ready: false, status: history.status.insights };
+  const now = Date.now();
+  const hour = new Date(now + tzOffsetMs(now)).getUTCHours();
+  const dt = dayType(localDate(now));
+  const live: { network: string; line: string; delaySec: number }[] = [];
+  for (const [tripId, rt] of realtime.state.trips) {
+    if (rt.cancelled || rt.delaySec == null || !positions.state.vehicles.has(tripId)) continue;
+    const routeId = gtfs.trips.get(tripId)?.routeId;
+    const line = routeId && gtfs.lines.get(routeId)?.name;
+    if (routeId && line) live.push({ network: routeId.slice(0, 2), line, delaySec: rt.delaySec });
+  }
+  return { ready: true, status: history.status.insights, dayType: dt, hour, anomalies: lineAnomalies(ins, live, dt, hour) };
 });
 
 registerStats(app);

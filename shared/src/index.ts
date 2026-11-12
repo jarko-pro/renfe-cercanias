@@ -111,7 +111,14 @@ export interface HealthResponse {
   vehicles: number;
   alerts: number;
   /** Histórico de retrasos: viajes en curso, guardados y último error de la base de datos. */
-  history?: { enabled: boolean; pending: number; saved: number; lastError: string | null };
+  history?: {
+    enabled: boolean;
+    pending: number;
+    saved: number;
+    lastError: string | null;
+    /** Estadísticas de referencia: días usados y cuántos trenes y franjas de línea tienen datos. */
+    insights: { loadedAt: number; days: number; trains: number; trainStops: number; lines: number } | null;
+  };
   error?: string;
 }
 
