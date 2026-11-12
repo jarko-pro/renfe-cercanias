@@ -1,7 +1,7 @@
 import type { Stop } from '@renfe/shared';
 import L from 'leaflet';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { CircleMarker, MapContainer, Marker, Pane, Polyline, TileLayer, Tooltip, useMap, useMapEvents } from 'react-leaflet';
+import { CircleMarker, MapContainer, Marker, Pane, Polyline, TileLayer, useMap, useMapEvents } from 'react-leaflet';
 
 export interface TrainPosition {
   tripId: string;
@@ -163,6 +163,162 @@ function FitTrain({ train, stop }: { train: TrainPosition | null; stop: Stop | u
   return null;
 }
 
+/** Distancia (px) a la que un clic o un toque cuenta como sobre una estación. */
+const HIT_MOUSE = 14;
+const HIT_TOUCH = 22;
+/** Margen (px) alrededor del nombre que sigue contando como "encima", para llegar a él sin que se cierre. */
+const TIP_MARGIN = 10;
+/** Tiempo de gracia antes de cerrar el nombre al salir de la zona. */
+const TIP_HIDE_MS = 250;
+
+/**
+ * Clics y nombre de las estaciones. En lugar de que cada punto detecte el clic con su tamaño
+ * visible (muy pequeño en el móvil), se busca la estación más cercana dentro de un radio amplio:
+ * si dos puntos se solapan, gana el más cercano al dedo. El nombre (al pasar el ratón) también se
+ * puede pulsar, pero siempre después de los puntos: si el clic cae sobre un punto, gana el punto.
+ */
+function StopHits({ stops, onSelect }: { stops: Stop[]; onSelect: (stop: Stop) => void }) {
+  const map = useMap();
+  const tooltip = useRef<L.Tooltip | null>(null);
+  const hovered = useRef<Stop | null>(null);
+  const stopsRef = useRef(stops);
+  stopsRef.current = stops;
+  const onSelectRef = useRef(onSelect);
+  onSelectRef.current = onSelect;
+
+  useEffect(() => {
+    const coarse = window.matchMedia('(pointer: coarse)');
+    const container = map.getContainer();
+    // interactive: el nombre recibe sus propios clics (y muestra la mano), en vez de depender de que
+    // el clic lo atraviese hasta el mapa.
+    const tip = L.tooltip({ direction: 'top', offset: [0, -6], opacity: 0.9, interactive: true });
+    tooltip.current = tip;
+
+    /** Estación más cercana al punto (coordenadas del contenedor), dentro del radio. */
+    const nearest = (p: L.Point, radius: number): Stop | null => {
+      let best: Stop | null = null;
+      let bestD = radius * radius;
+      const b = map.getBounds().pad(0.05);
+      for (const s of stopsRef.current) {
+        if (!b.contains([s.lat, s.lon])) continue;
+        const q = map.latLngToContainerPoint([s.lat, s.lon]);
+        const d = (q.x - p.x) ** 2 + (q.y - p.y) ** 2;
+        if (d <= bestD) {
+          bestD = d;
+          best = s;
+        }
+      }
+      return best;
+    };
+
+    /**
+     * ¿Está el puntero encima del nombre que se está mostrando? La zona va desde el nombre hasta
+     * su punto (más un margen), para no dejar un hueco entre los dos al subir en diagonal.
+     */
+    const overTooltip = (e: MouseEvent): boolean => {
+      const el = map.hasLayer(tip) ? tip.getElement() : null;
+      const s = hovered.current;
+      if (!el || !s) return false;
+      const r = el.getBoundingClientRect();
+      const c = container.getBoundingClientRect();
+      const dotY = c.top + map.latLngToContainerPoint([s.lat, s.lon]).y;
+      return (
+        e.clientX >= r.left - TIP_MARGIN &&
+        e.clientX <= r.right + TIP_MARGIN &&
+        e.clientY >= r.top - TIP_MARGIN &&
+        e.clientY <= Math.max(r.bottom, dotY) + TIP_MARGIN
+      );
+    };
+
+    let hideTimer = 0;
+    const show = (s: Stop | null) => {
+      if (s) {
+        clearTimeout(hideTimer);
+        hideTimer = 0;
+        if (s === hovered.current) return;
+        hovered.current = s;
+        tip.setLatLng([s.lat, s.lon]).setContent(s.name).addTo(map);
+      } else if (hovered.current && !hideTimer) {
+        hideTimer = window.setTimeout(() => {
+          hideTimer = 0;
+          hovered.current = null;
+          tip.remove();
+        }, TIP_HIDE_MS);
+      }
+    };
+    const hideNow = () => {
+      clearTimeout(hideTimer);
+      hideTimer = 0;
+      hovered.current = null;
+      tip.remove();
+    };
+
+    let frame = 0;
+    const onMove = (ev: L.LeafletMouseEvent) => {
+      const e = ev.originalEvent;
+      cancelAnimationFrame(frame);
+      frame = requestAnimationFrame(() => {
+        const s = nearest(ev.containerPoint, HIT_MOUSE);
+        // Sin punto cerca, el nombre que ya está a la vista se mantiene mientras el ratón esté encima.
+        const keep = !s && hovered.current && overTooltip(e) ? hovered.current : s;
+        show(keep);
+        container.style.cursor = keep ? 'pointer' : '';
+      });
+    };
+
+    const onClick = (ev: L.LeafletMouseEvent) => {
+      const s = nearest(ev.containerPoint, coarse.matches ? HIT_TOUCH : HIT_MOUSE);
+      if (s) return onSelectRef.current(s);
+      if (hovered.current && overTooltip(ev.originalEvent)) onSelectRef.current(hovered.current);
+    };
+
+    // Clic sobre el nombre: si debajo hay un punto, gana el punto; si no, la estación del nombre.
+    const onTipClick = (e: MouseEvent) => {
+      L.DomEvent.stop(e); // que no llegue también al mapa (abriría dos veces)
+      const s = nearest(map.mouseEventToContainerPoint(e), coarse.matches ? HIT_TOUCH : HIT_MOUSE);
+      const pick = s ?? hovered.current;
+      if (pick) onSelectRef.current(pick);
+    };
+    // El elemento del nombre se crea la primera vez que se muestra; se engancha entonces.
+    const onTipOpen = () => {
+      const el = tip.getElement();
+      if (!el || (el as HTMLElement & { _hits?: boolean })._hits) return;
+      (el as HTMLElement & { _hits?: boolean })._hits = true;
+      L.DomEvent.disableClickPropagation(el);
+      L.DomEvent.on(el, 'click', onTipClick as L.DomEvent.EventHandlerFn);
+    };
+    tip.on('add', onTipOpen);
+
+    const onOut = () => {
+      hideNow();
+      container.style.cursor = '';
+    };
+
+    map.on('mousemove', onMove);
+    map.on('click', onClick);
+    map.on('mouseout movestart zoomstart', onOut);
+    return () => {
+      cancelAnimationFrame(frame);
+      clearTimeout(hideTimer);
+      map.off('mousemove', onMove);
+      map.off('click', onClick);
+      map.off('mouseout movestart zoomstart', onOut);
+      tip.off('add', onTipOpen);
+      const el = tip.getElement();
+      if (el) L.DomEvent.off(el, 'click', onTipClick as L.DomEvent.EventHandlerFn);
+      tip.remove();
+    };
+  }, [map]);
+
+  // Si cambia la lista (p. ej. al llegar del servidor), el nombre mostrado puede ser de otra copia.
+  useEffect(() => {
+    hovered.current = null;
+    tooltip.current?.remove();
+  }, [stops]);
+
+  return null;
+}
+
 function RouteLine({ path, color }: { path: [number, number][]; color: string }) {
   return (
     <>
@@ -213,7 +369,7 @@ export function MapView({ stops, selectedId, favoriteIds, focus, onSelect, train
       <MapContainer center={view.center} zoom={view.zoom} preferCanvas zoomControl={false} className="map">
         <TileLayer
           // Renfe exige citar la fuente ("Origen de los datos: Renfe Operadora") en sus datos abiertos.
-          attribution='Origen de los datos: <a href="https://data.renfe.com/" target="_blank" rel="noopener">Renfe Operadora</a> · &copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a> · <a href="./privacidad.html">Privacidad</a>'
+          attribution='Origen de los datos: <a href="https://data.renfe.com/" target="_blank" rel="noopener">Renfe Operadora</a> · &copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a> · <a href="/privacidad.html" target="_blank" rel="noopener">Privacidad</a>'
           url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
           maxZoom={19}
         />
@@ -231,12 +387,9 @@ export function MapView({ stops, selectedId, favoriteIds, focus, onSelect, train
                 fillColor: `#${s.lines[0]?.color ?? '8a0b3a'}`,
                 fillOpacity: 1,
               }}
-              eventHandlers={{ click: () => onSelect(s) }}
-            >
-              <Tooltip direction="top" offset={[0, -6]}>
-                {s.name}
-              </Tooltip>
-            </CircleMarker>
+              // Los clics y el nombre los gestiona StopHits, con un área mayor que el punto.
+              interactive={false}
+            />
           );
         })}
         {userPos && (
@@ -254,6 +407,7 @@ export function MapView({ stops, selectedId, favoriteIds, focus, onSelect, train
           </Pane>
         )}
         {train && <TrainMarker key={train.tripId} train={train} />}
+        <StopHits stops={stops} onSelect={onSelect} />
         <FitTrain train={train} stop={selectedStop} />
         <FlyTo focus={focus} />
         <FlyTo focus={locFocus} />

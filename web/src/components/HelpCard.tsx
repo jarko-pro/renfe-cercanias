@@ -71,7 +71,7 @@ export function HelpCard() {
 
       <p className="help-foot">
         Datos abiertos de Renfe, actualizados cada 30 s. No es una app oficial de Renfe.{' '}
-        <a href="./privacidad.html">Privacidad</a>
+        <a href="/privacidad.html" target="_blank" rel="noopener">Privacidad</a>
       </p>
     </div>
   );
