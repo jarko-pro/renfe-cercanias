@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import cors from '@fastify/cors';
-import type { ArrivalsResponse, HealthResponse, Stop, TrainMatch, TripShape } from '@renfe/shared';
+import type { ArrivalsResponse, HealthResponse, Stop, StopTimetable, TrainMatch, TripShape, TripTimes } from '@renfe/shared';
 import Fastify from 'fastify';
 import { alertsForStop } from './alerts.js';
 import { getArrivals } from './arrivals.js';
@@ -13,10 +13,11 @@ import { createRealtimePoller } from './realtime/poller.js';
 import { createVehiclePoller } from './realtime/vehicles.js';
 import { tripPath } from './shape.js';
 import { findTrains } from './trains.js';
+import { getStopTimetable, getTripTimes } from './timetable.js';
 import { registerStats } from './stats.js';
 import { createHistory } from './history/index.js';
 import { dayType, lineAnomalies } from './history/insights.js';
-import { localDate, tzOffsetMs } from './time.js';
+import { addDays, localDate, tzOffsetMs } from './time.js';
 
 const PORT = Number(process.env.PORT ?? 3001);
 const ZIP_PATH = fileURLToPath(new URL('../data/fomento_transit.zip', import.meta.url));
@@ -137,6 +138,16 @@ app.get<{ Params: { id: string } }>('/api/stops/:id/arrivals', async (req, reply
   return res;
 });
 
+// Horario programado de todo el día (day=0 hoy, 1 mañana). No depende del tiempo real.
+app.get<{ Params: { id: string }; Querystring: { day?: string } }>('/api/stops/:id/timetable', async (req, reply) => {
+  if (!gtfs) return reply.code(503).send({ error: 'Cargando datos de Renfe, prueba en unos segundos' });
+  const day = req.query.day === '1' ? 1 : 0;
+  const res: StopTimetable | null = getStopTimetable(gtfs, req.params.id, addDays(localDate(Date.now()), day));
+  if (!res) return reply.code(404).send({ error: 'Parada no encontrada' });
+  reply.header('Cache-Control', 'public, max-age=600');
+  return res;
+});
+
 app.get<{ Params: { tripId: string } }>('/api/trips/:tripId/live', async (req, reply) => {
   if (!gtfs) return reply.code(503).send({ error: 'Cargando datos de Renfe, prueba en unos segundos' });
   const { tripId } = req.params;
@@ -152,6 +163,15 @@ app.get<{ Params: { tripId: string } }>('/api/trips/:tripId/shape', async (req, 
   const { tripId } = req.params;
   if (!gtfs.trips.has(tripId)) return reply.code(404).send({ error: 'Tren no encontrado' });
   const res: TripShape = { tripId, path: tripPath(gtfs, tripId) ?? [] };
+  reply.header('Cache-Control', 'public, max-age=3600');
+  return res;
+});
+
+// Recorrido programado del tren: paradas y hora en cada una.
+app.get<{ Params: { tripId: string } }>('/api/trips/:tripId/stops', async (req, reply) => {
+  if (!gtfs) return reply.code(503).send({ error: 'Cargando datos de Renfe, prueba en unos segundos' });
+  const res: TripTimes | null = getTripTimes(gtfs, req.params.tripId);
+  if (!res) return reply.code(404).send({ error: 'Tren no encontrado' });
   reply.header('Cache-Control', 'public, max-age=3600');
   return res;
 });

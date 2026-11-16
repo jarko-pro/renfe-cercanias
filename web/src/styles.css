@@ -1069,3 +1069,210 @@ button.arrival.following.dx {
   font-size: 14px;
   color: var(--warn);
 }
+
+/* ---------- Horario de todo el día ---------- */
+.tt-open {
+  display: block;
+  margin: 12px auto 14px;
+  padding: 8px 16px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--text-2);
+  font: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.tt-open:hover {
+  background: var(--surface-2);
+  color: var(--text);
+}
+.placeholder p {
+  margin: 0;
+}
+.tt-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.tt-back {
+  padding: 6px 4px;
+  border: none;
+  background: none;
+  color: var(--text-2);
+  font: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.tt-back:hover {
+  color: var(--text);
+}
+.tt-back span {
+  font-size: 18px;
+  margin-right: 2px;
+}
+.tabs.tt-days {
+  flex: none;
+}
+.tabs.tt-days button {
+  height: 28px;
+  padding: 0 12px;
+  font-size: 13px;
+}
+.tabs.tt-dirs button {
+  min-width: 0;
+  padding: 0 8px;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.tt-dir {
+  margin: 0;
+  font-size: 14px;
+  color: var(--text-2);
+}
+.tt-dir strong {
+  color: var(--text);
+}
+.tt-dir .line-chip {
+  vertical-align: 1px;
+  margin-right: 2px;
+}
+.tt-body {
+  position: relative;
+}
+.tt-hours {
+  list-style: none;
+  margin: 0;
+  padding: 4px 0;
+}
+.tt-hour {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  padding: 4px 16px;
+  border-bottom: 1px solid var(--border);
+}
+.tt-hour:last-child {
+  border-bottom: none;
+}
+.tt-hour.current {
+  background: var(--surface-2);
+}
+.tt-mins {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px 4px;
+}
+.tt-min {
+  min-width: 58px;
+  height: 32px;
+  padding: 0 6px;
+  border: none;
+  border-radius: 8px;
+  background: none;
+  color: var(--text);
+  font: inherit;
+  font-size: 15px;
+  font-variant-numeric: tabular-nums;
+  cursor: pointer;
+}
+.tt-min:hover {
+  background: var(--border);
+}
+.tt-min:focus-visible,
+.tt-back:focus-visible,
+.tt-open:focus-visible {
+  outline: 2px solid var(--brand);
+  outline-offset: 1px;
+}
+.tt-min.past {
+  color: var(--text-2);
+  opacity: 0.55;
+}
+.tt-min.next {
+  background: var(--live-bg);
+  color: var(--live);
+  font-weight: 700;
+}
+.tt-min sup,
+.tt-notes sup {
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--warn);
+}
+.tt-notes {
+  list-style: none;
+  margin: 0;
+  padding: 8px 16px 0;
+  font-size: 13px;
+  color: var(--text-2);
+}
+.tt-hint {
+  margin: 0;
+  padding: 8px 16px 14px;
+  font-size: 12px;
+  color: var(--text-2);
+}
+
+/* Recorrido de un tren: hora · punto en la línea · estación */
+.tt-trip {
+  list-style: none;
+  margin: 0;
+  padding: 8px 0;
+}
+.tt-trip li {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 7px 16px;
+}
+.tt-time {
+  flex: none;
+  width: 44px;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-2);
+}
+.tt-dot {
+  position: relative;
+  flex: none;
+  width: 12px;
+  height: 12px;
+  border: 3px solid var(--line);
+  border-radius: 50%;
+  background: var(--surface);
+  z-index: 1;
+}
+/* La línea vertical que une las paradas. */
+.tt-trip li::before {
+  content: '';
+  position: absolute;
+  left: 76px;
+  top: 0;
+  bottom: 0;
+  width: 4px;
+  background: var(--line);
+}
+.tt-trip li:first-child::before {
+  top: 50%;
+}
+.tt-trip li:last-child::before {
+  bottom: 50%;
+}
+.tt-trip li.before {
+  opacity: 0.5;
+}
+.tt-trip li.here {
+  background: var(--surface-2);
+  font-weight: 700;
+}
+.tt-trip li.here .tt-time {
+  color: var(--text);
+}
+.tt-trip li.here .tt-dot {
+  background: var(--line);
+}

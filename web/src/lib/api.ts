@@ -1,4 +1,4 @@
-import type { ArrivalsResponse, Stop, TrainMatch, TripLive, TripShape } from '@renfe/shared';
+import type { ArrivalsResponse, Stop, StopTimetable, TrainMatch, TripLive, TripShape, TripTimes } from '@renfe/shared';
 
 /** Vacío en desarrollo (proxy de Vite). En Capacitor/producción: URL pública del backend. */
 const BASE = (import.meta.env.VITE_API_URL ?? '').replace(/\/$/, '');
@@ -51,6 +51,13 @@ export const fetchStops = (signal?: AbortSignal) => get<Stop[]>('/api/stops', si
 
 export const fetchArrivals = (stopId: string, signal?: AbortSignal) =>
   get<ArrivalsResponse>(`/api/stops/${encodeURIComponent(stopId)}/arrivals`, signal);
+
+/** Horario programado de todo el día: 0 = hoy, 1 = mañana. */
+export const fetchTimetable = (stopId: string, day: 0 | 1, signal?: AbortSignal) =>
+  get<StopTimetable>(`/api/stops/${encodeURIComponent(stopId)}/timetable?day=${day}`, signal);
+
+export const fetchTripTimes = (tripId: string, signal?: AbortSignal) =>
+  get<TripTimes>(`/api/trips/${encodeURIComponent(tripId)}/stops`, signal);
 
 export const fetchTripLive = (tripId: string, signal?: AbortSignal) =>
   get<TripLive>(`/api/trips/${encodeURIComponent(tripId)}/live`, signal);

@@ -137,4 +137,35 @@ export interface TrainMatch {
   departure: number;
 }
 
+/** Una línea en un sentido, con todas sus salidas del día en una estación. */
+export interface TimetableGroup {
+  line: Line;
+  /** Destino más habitual de este sentido. */
+  headsign: string;
+  /** Otros destinos de algunos trenes, marcados con una letra en su hora. */
+  notes: { mark: string; headsign: string }[];
+  /** Salidas en orden; `t` en segundos desde el inicio del día de servicio (puede pasar de 24 h). */
+  trains: { tripId: string; t: number; mark?: string }[];
+}
+
+/** Horario programado de una estación para un día (sin tiempo real). */
+export interface StopTimetable {
+  stopId: string;
+  /** Día de servicio (YYYYMMDD). */
+  date: string;
+  /** Inicio del día de servicio (epoch ms): hora real = base + t·1000. */
+  base: number;
+  groups: TimetableGroup[];
+}
+
+/** Recorrido programado de un tren: sus paradas con la hora de cada una. */
+export interface TripTimes {
+  tripId: string;
+  trainNumber?: string;
+  line: Line;
+  headsign: string;
+  /** `t` en segundos desde el inicio del día de servicio (salida; llegada en la última). */
+  stops: { stopId: string; name: string; t: number }[];
+}
+
 export * from './slug';

@@ -1,8 +1,10 @@
 import type { Arrival, ArrivalsResponse, Stop, StopAlert, TripLive } from '@renfe/shared';
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { track } from '../lib/analytics';
 import { ApiError, fetchArrivals, isAbort } from '../lib/api';
 import { formatTime } from '../lib/text';
 import { LineChip } from './LineChip';
+import { Timetable } from './Timetable';
 
 const REFRESH_MS = 30_000;
 const RETRY_MS = 4_000;
@@ -244,6 +246,8 @@ export function StopPanel({ stop, isFavorite, onToggleFavorite, onClose, tracked
   const [tab, setTab] = useState<Tab>('departures');
   const [lineFilter, setLineFilter] = useState<string[]>([]);
   const [showAlerts, setShowAlerts] = useState(false);
+  // 'timetable': el horario de todo el día sustituye a la lista de próximos trenes.
+  const [view, setView] = useState<'live' | 'timetable'>('live');
 
   useEffect(() => {
     setData(null);
@@ -252,6 +256,7 @@ export function StopPanel({ stop, isFavorite, onToggleFavorite, onClose, tracked
     setTab('departures');
     setLineFilter([]);
     setShowAlerts(false);
+    setView('live');
     let ctrl = new AbortController();
     let timer: ReturnType<typeof setTimeout> | undefined;
 
@@ -347,8 +352,23 @@ export function StopPanel({ stop, isFavorite, onToggleFavorite, onClose, tracked
       ? 'No llega ningún tren que termine aquí en los próximos 90 minutos.'
       : 'No hay trenes previstos en los próximos 90 minutos.';
 
+  const openTimetable = () => {
+    setView('timetable');
+    setShowAlerts(false);
+    track('horario', { estacion: stop.name });
+  };
+  const timetableLink = (
+    <button className="tt-open" onClick={openTimetable}>
+      Horario de todo el día <span aria-hidden="true">›</span>
+    </button>
+  );
+  const timetable = view === 'timetable';
+
   return (
-    <section className={`panel${trackedArrival ? ' compact' : ''}`} aria-label={`Próximos trenes en ${stop.name}`}>
+    <section
+      className={`panel${trackedArrival && !timetable ? ' compact' : ''}`}
+      aria-label={`Próximos trenes en ${stop.name}`}
+    >
       <header className="panel-header">
         <div className="panel-title">
           <h2>{stop.name}</h2>
@@ -379,97 +399,109 @@ export function StopPanel({ stop, isFavorite, onToggleFavorite, onClose, tracked
         </button>
       </header>
 
-      {banner && !showAlerts && (
+      {timetable && <Timetable stop={stop} initialLine={lineFilter[0]} onBack={() => setView('live')} />}
+
+      {!timetable && banner && !showAlerts && (
         <button className="alert-banner" onClick={() => setShowAlerts(true)} title="Ver avisos">
           <span aria-hidden="true">⚠</span>
           <span className="alert-banner-text">{banner.text}</span>
         </button>
       )}
 
-      <div className="panel-controls">
-        {stop.lines.length > 1 && (
-          <div className="line-filter" role="group" aria-label="Filtrar por línea">
-            {stop.lines.map((l) => {
-              const on = lineFilter.includes(l.name);
-              return (
-                <button
-                  key={l.name}
-                  className={`line-toggle${on ? ' on' : ''}${lineFilter.length && !on ? ' dim' : ''}`}
-                  aria-pressed={on}
-                  title={on ? `Quitar filtro ${l.name}` : `Ver solo ${l.name}`}
-                  onClick={() => toggleLine(l.name)}
-                >
-                  <LineChip line={l} />
+      {!timetable && (
+        <>
+          <div className="panel-controls">
+            {stop.lines.length > 1 && (
+              <div className="line-filter" role="group" aria-label="Filtrar por línea">
+                {stop.lines.map((l) => {
+                  const on = lineFilter.includes(l.name);
+                  return (
+                    <button
+                      key={l.name}
+                      className={`line-toggle${on ? ' on' : ''}${lineFilter.length && !on ? ' dim' : ''}`}
+                      aria-pressed={on}
+                      title={on ? `Quitar filtro ${l.name}` : `Ver solo ${l.name}`}
+                      onClick={() => toggleLine(l.name)}
+                    >
+                      <LineChip line={l} />
+                    </button>
+                  );
+                })}
+                {lineFilter.length > 0 && (
+                  <button className="clear-filter" onClick={() => setLineFilter([])}>
+                    Todas
+                  </button>
+                )}
+              </div>
+            )}
+            {showTabs && (
+              <div className="tabs" role="tablist">
+                <button role="tab" aria-selected={tab === 'departures'} onClick={() => setTab('departures')}>
+                  Salidas <span className="count">{departures.length}</span>
                 </button>
-              );
-            })}
-            {lineFilter.length > 0 && (
-              <button className="clear-filter" onClick={() => setLineFilter([])}>
-                Todas
+                <button role="tab" aria-selected={tab === 'arrivals'} onClick={() => setTab('arrivals')}>
+                  Llegadas <span className="count">{arrivals.length}</span>
+                </button>
+              </div>
+            )}
+          </div>
+
+          {trackedArrival && (
+            <div className="compact-train">
+              <ul className="arrivals">
+                <ArrivalRow a={trackedArrival} now={now} live={tracked?.live ?? null} onTrack={onTrack} compact />
+              </ul>
+              <button className="show-all" onClick={() => onTrack(null)}>
+                <span aria-hidden="true">˄</span> Ver todos los trenes
               </button>
+            </div>
+          )}
+
+          <div className="panel-body">
+            {!data && (loading || waking) && (
+              <p className="placeholder">
+                {waking ? (
+                  <>
+                    <span className="spinner" aria-hidden="true" />
+                    Despertando el servidor… puede tardar hasta un minuto. Se actualizará solo.
+                  </>
+                ) : (
+                  'Cargando próximos trenes…'
+                )}
+              </p>
             )}
-          </div>
-        )}
-        {showTabs && (
-          <div className="tabs" role="tablist">
-            <button role="tab" aria-selected={tab === 'departures'} onClick={() => setTab('departures')}>
-              Salidas <span className="count">{departures.length}</span>
-            </button>
-            <button role="tab" aria-selected={tab === 'arrivals'} onClick={() => setTab('arrivals')}>
-              Llegadas <span className="count">{arrivals.length}</span>
-            </button>
-          </div>
-        )}
-      </div>
-
-      {trackedArrival && (
-        <div className="compact-train">
-          <ul className="arrivals">
-            <ArrivalRow a={trackedArrival} now={now} live={tracked?.live ?? null} onTrack={onTrack} compact />
-          </ul>
-          <button className="show-all" onClick={() => onTrack(null)}>
-            <span aria-hidden="true">˄</span> Ver todos los trenes
-          </button>
-        </div>
-      )}
-
-      <div className="panel-body">
-        {!data && (loading || waking) && (
-          <p className="placeholder">
-            {waking ? (
-              <>
-                <span className="spinner" aria-hidden="true" />
-                Despertando el servidor… puede tardar hasta un minuto. Se actualizará solo.
-              </>
-            ) : (
-              'Cargando próximos trenes…'
+            {showAlerts && <AlertList alerts={alerts} />}
+            {error && !data && !waking && !loading && <p className="placeholder error">{error} · reintentando…</p>}
+            {data && visible.length === 0 && (
+              <div className="placeholder">
+                <p>{emptyText}</p>
+                {timetableLink}
+              </div>
             )}
-          </p>
-        )}
-        {showAlerts && <AlertList alerts={alerts} />}
-        {error && !data && !waking && !loading && <p className="placeholder error">{error} · reintentando…</p>}
-        {data && visible.length === 0 && <p className="placeholder">{emptyText}</p>}
-        {data && visible.length > 0 && (
-          <ul className={`arrivals${stale ? ' stale' : ''}`} ref={listRef}>
-            {visible.map((a) => (
-              <ArrivalRow
-                key={`${a.tripId}-${a.scheduled}`}
-                a={a}
-                now={now}
-                live={tracked?.tripId === a.tripId ? tracked.live : undefined}
-                onTrack={onTrack}
-              />
-            ))}
-          </ul>
-        )}
-      </div>
+            {data && visible.length > 0 && (
+              <ul className={`arrivals${stale ? ' stale' : ''}`} ref={listRef}>
+                {visible.map((a) => (
+                  <ArrivalRow
+                    key={`${a.tripId}-${a.scheduled}`}
+                    a={a}
+                    now={now}
+                    live={tracked?.tripId === a.tripId ? tracked.live : undefined}
+                    onTrack={onTrack}
+                  />
+                ))}
+              </ul>
+            )}
+            {data && visible.length > 0 && timetableLink}
+          </div>
 
-      {data && (
-        <footer className={`panel-footer${stale ? ' stale' : ''}`}>
-          {stale ? 'Sin datos nuevos desde las ' : 'Actualizado a las '}
-          {formatTime(data.generatedAt)}
-          {error && ' · sin conexión, reintentando'}
-        </footer>
+          {data && (
+            <footer className={`panel-footer${stale ? ' stale' : ''}`}>
+              {stale ? 'Sin datos nuevos desde las ' : 'Actualizado a las '}
+              {formatTime(data.generatedAt)}
+              {error && ' · sin conexión, reintentando'}
+            </footer>
+          )}
+        </>
       )}
     </section>
   );
