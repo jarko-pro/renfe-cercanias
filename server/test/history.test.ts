@@ -3,7 +3,7 @@ import { beforeAll, describe, expect, it } from 'vitest';
 import { buildGtfsData } from '../src/gtfs/build.js';
 import type { GtfsData, GtfsSource } from '../src/gtfs/types.js';
 import { createCollector, type TrainRun } from '../src/history/collector.js';
-import { insertRuns, migrate, type Db } from '../src/history/db.js';
+import { insertRuns, loadRecentRuns, migrate, type Db } from '../src/history/db.js';
 import type { TripRealtime } from '../src/realtime/poller.js';
 import { serviceDayBase } from '../src/time.js';
 
@@ -111,6 +111,25 @@ describe('collector', () => {
   });
 });
 
+describe('collector: horario con la hora real', () => {
+  it('sigue sabiendo el retraso de los viajes en curso y de los ya terminados', () => {
+    const c = createCollector(at(7, 0));
+    feed(c, at(7, 50), at(8, 25), () => new Map([['1004J19799C1', rt([['S2', 120]])]]));
+    expect(c.observed(TODAY, '1004J19799C1')).toMatchObject({ status: 'running', delays: [null, 120, null] });
+    c.collect(data, TODAY, at(10, 0));
+    expect(c.observed(TODAY, '1004J19799C1')).toMatchObject({ status: 'ok', delays: [null, 120, null] });
+    expect(c.observed(TODAY, 'NOPE')).toBeNull();
+  });
+
+  it('recupera los viajes guardados y no los vuelve a entregar', () => {
+    const c = createCollector(at(9, 0));
+    c.restore([{ date: TODAY, trip_id: '1004J19799C1', status: 'cancelled', stops: ['S1', 'S2', 'S3'], delays: [null, null, null] }]);
+    expect(c.observed(TODAY, '1004J19799C1')).toMatchObject({ status: 'cancelled', cancelled: true });
+    feed(c, at(9, 0), at(9, 5), () => new Map([['1004J19799C1', rt([['S3', 60]])]]));
+    expect(c.collect(data, TODAY, at(10, 0)).map((r) => r.train)).not.toContain('19799');
+  });
+});
+
 describe('db', () => {
   it('crea la tabla, inserta y no duplica', async () => {
     const pg = new PGlite();
@@ -134,6 +153,23 @@ describe('db', () => {
       'select train, delays, stops from train_runs',
     );
     expect(rows).toEqual([{ train: '19799', delays: [null, 180, 240], stops: ['S1', 'S2', 'S3'] }]);
+    await pg.close();
+  });
+
+  it('recupera los viajes de los últimos días para el horario', async () => {
+    const pg = new PGlite();
+    const db = pg as unknown as Db;
+    await migrate(db);
+    const { rows } = await db.query<{ d: string }>(`select to_char(current_date, 'YYYY-MM-DD') as d`);
+    const today = rows[0].d;
+    const base = { network: '10', train: '19799', line: 'C1', dep_time: 28800, stops: ['S1', 'S2'], delays: [60, null] };
+    await insertRuns(db, [
+      { ...base, service_date: today, trip_id: 'HOY', status: 'ok' },
+      { ...base, service_date: '2020-01-01', trip_id: 'VIEJO', status: 'ok' },
+    ]);
+    expect(await loadRecentRuns(db)).toEqual([
+      { date: today.replace(/-/g, ''), trip_id: 'HOY', status: 'ok', stops: ['S1', 'S2'], delays: [60, null] },
+    ]);
     await pg.close();
   });
 });

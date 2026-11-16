@@ -1,4 +1,4 @@
-import type { TrainRun } from './collector.js';
+import type { StoredRun, TrainRun } from './collector.js';
 
 /** Lo mínimo que usamos de un cliente Postgres (pg.Pool o PGlite en los tests). */
 export interface Db {
@@ -37,4 +37,13 @@ export async function insertRuns(db: Db, runs: TrainRun[]): Promise<void> {
 
 export async function purgeOld(db: Db): Promise<void> {
   await db.query(`delete from train_runs where service_date < current_date - ${RETENTION_DAYS}`);
+}
+
+/** Viajes guardados de los últimos días (para el horario con la hora real tras reiniciar). */
+export async function loadRecentRuns(db: Db): Promise<StoredRun[]> {
+  const { rows } = await db.query<StoredRun>(
+    `select to_char(service_date, 'YYYYMMDD') as date, trip_id, status, stops, delays
+     from train_runs where service_date >= current_date - 2`,
+  );
+  return rows;
 }

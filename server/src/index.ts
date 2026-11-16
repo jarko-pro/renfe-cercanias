@@ -142,9 +142,12 @@ app.get<{ Params: { id: string } }>('/api/stops/:id/arrivals', async (req, reply
 app.get<{ Params: { id: string }; Querystring: { day?: string } }>('/api/stops/:id/timetable', async (req, reply) => {
   if (!gtfs) return reply.code(503).send({ error: 'Cargando datos de Renfe, prueba en unos segundos' });
   const day = req.query.day === '1' ? 1 : 0;
-  const res: StopTimetable | null = getStopTimetable(gtfs, req.params.id, addDays(localDate(Date.now()), day));
+  const now = Date.now();
+  // Hoy lleva la hora real de los que ya han pasado: cambia a cada minuto.
+  const live = day === 0 ? { nowMs: now, observed: history.observed } : undefined;
+  const res: StopTimetable | null = getStopTimetable(gtfs, req.params.id, addDays(localDate(now), day), live);
   if (!res) return reply.code(404).send({ error: 'Parada no encontrada' });
-  reply.header('Cache-Control', 'public, max-age=600');
+  reply.header('Cache-Control', `public, max-age=${day === 0 ? 60 : 600}`);
   return res;
 });
 
@@ -167,12 +170,15 @@ app.get<{ Params: { tripId: string } }>('/api/trips/:tripId/shape', async (req, 
   return res;
 });
 
-// Recorrido programado del tren: paradas y hora en cada una.
-app.get<{ Params: { tripId: string } }>('/api/trips/:tripId/stops', async (req, reply) => {
+// Recorrido del tren (day=0 hoy, 1 mañana): paradas, hora programada y, hoy, la real en las ya pasadas.
+app.get<{ Params: { tripId: string }; Querystring: { day?: string } }>('/api/trips/:tripId/stops', async (req, reply) => {
   if (!gtfs) return reply.code(503).send({ error: 'Cargando datos de Renfe, prueba en unos segundos' });
-  const res: TripTimes | null = getTripTimes(gtfs, req.params.tripId);
+  const day = req.query.day === '1' ? 1 : 0;
+  const now = Date.now();
+  const live = day === 0 ? { nowMs: now, observed: history.observed } : undefined;
+  const res: TripTimes | null = getTripTimes(gtfs, req.params.tripId, addDays(localDate(now), day), live);
   if (!res) return reply.code(404).send({ error: 'Tren no encontrado' });
-  reply.header('Cache-Control', 'public, max-age=3600');
+  reply.header('Cache-Control', `public, max-age=${day === 0 ? 30 : 3600}`);
   return res;
 });
 

@@ -1,10 +1,34 @@
-import type { Line, StopTimetable, TimetableGroup, TripTimes } from '@renfe/shared';
+import type { Line, Passed, StopTimetable, TimetableGroup, TripTimes } from '@renfe/shared';
 import type { GtfsData } from './gtfs/types.js';
+import type { Observed } from './history/collector.js';
 import { trainNumber } from './gtfs/networks.js';
 import { serviceDayBase } from './time.js';
 
 const UNKNOWN_LINE: Line = { name: '?', color: '7A7A7A', textColor: 'FFFFFF' };
 const MARKS = 'abcdefghijklmnopqrstuvwxyz';
+/** Un tren sin ningún dato de Renfe se da por pasado este rato después de su hora. */
+const NO_DATA_MARGIN_S = 120;
+
+/** Lo que el histórico sabe de los viajes de hoy, para marcar los que ya han pasado. */
+export interface LiveContext {
+  nowMs: number;
+  observed: (date: string, tripId: string) => Observed | null;
+}
+
+/**
+ * Si el tren ya ha pasado por la parada `idx` de su recorrido, con qué retraso. Renfe da un
+ * retraso por tren, a veces solo para la parada siguiente: si falta el de esta parada, vale el
+ * último anterior que se conozca (o, si no hay, el siguiente).
+ */
+function passedAt(obs: Observed | null, idx: number, base: number, t: number, nowMs: number): Passed | undefined {
+  let d: number | null = null;
+  for (let i = idx; obs && i >= 0 && d == null; i--) d = obs.delays[i] ?? null;
+  // Paradas por las que pasó antes de que el servidor arrancara: vale el primer retraso posterior.
+  for (let i = idx + 1; obs && idx >= 0 && i < obs.delays.length && d == null; i++) d = obs.delays[i] ?? null;
+  if (obs?.cancelled) return base + t * 1000 < nowMs ? { delaySec: null, cancelled: true } : undefined;
+  if (d != null) return base + (t + d) * 1000 < nowMs ? { delaySec: d } : undefined;
+  return base + (t + NO_DATA_MARGIN_S) * 1000 < nowMs ? { delaySec: null } : undefined;
+}
 
 /**
  * Sentido de un viaje dentro de su línea. Renfe no da `direction_id` ni `trip_headsign`, pero
@@ -31,12 +55,19 @@ function destination(data: GtfsData, lastStopId: string, headsign: string): stri
  * sentido, como el cartel impreso de cada línea. Los trenes que terminan aquí no se cuentan
  * (no salen hacia ningún sitio).
  */
-export function getStopTimetable(data: GtfsData, stopId: string, date: string): StopTimetable | null {
+export function getStopTimetable(
+  data: GtfsData,
+  stopId: string,
+  date: string,
+  live?: LiveContext,
+): StopTimetable | null {
   const stop = data.stops.get(stopId);
   const services = data.servicesByDate.get(date);
   if (!stop || !services) return null;
 
-  const groups = new Map<string, { line: Line; trains: { tripId: string; t: number; headsign: string }[] }>();
+  const base = serviceDayBase(date);
+  type Train = { tripId: string; t: number; headsign: string; passed?: Passed };
+  const groups = new Map<string, { line: Line; trains: Train[] }>();
   for (const st of data.stopTimesByStop.get(stopId) ?? []) {
     const trip = data.trips.get(st.tripId);
     if (!trip || !services.has(trip.serviceId) || trip.lastStopId === stopId) continue;
@@ -45,7 +76,13 @@ export function getStopTimetable(data: GtfsData, stopId: string, date: string): 
     const key = `${line.name}|${directionKey(trip.shapeId, headsign)}`;
     let g = groups.get(key);
     if (!g) groups.set(key, (g = { line, trains: [] }));
-    g.trains.push({ tripId: st.tripId, t: st.dep, headsign });
+    let passed: Passed | undefined;
+    if (live) {
+      const obs = live.observed(date, st.tripId);
+      const idx = (obs?.stops ?? data.tripStops.get(st.tripId) ?? []).indexOf(stopId);
+      passed = passedAt(obs, idx, base, st.dep, live.nowMs);
+    }
+    g.trains.push({ tripId: st.tripId, t: st.dep, headsign, ...(passed ? { passed } : {}) });
   }
 
   const lineOrder = new Map(stop.lines.map((l, i) => [l.name, i]));
@@ -63,22 +100,27 @@ export function getStopTimetable(data: GtfsData, stopId: string, date: string): 
       const markOf = new Map(notes.map((n) => [n.headsign, n.mark]));
       const trains = g.trains
         .sort((a, b) => a.t - b.t)
-        .map(({ tripId, t, headsign }) => {
+        .map(({ headsign, ...train }) => {
           const mark = markOf.get(headsign);
-          return mark ? { tripId, t, mark } : { tripId, t };
+          return mark ? { ...train, mark } : train;
         });
       return { line: g.line, headsign: main, notes, trains };
     });
 
-  return { stopId, date, base: serviceDayBase(date), groups: out };
+  return { stopId, date, base, groups: out };
 }
 
-/** Recorrido programado de un tren, con la hora en cada parada. */
-export function getTripTimes(data: GtfsData, tripId: string): TripTimes | null {
+/**
+ * Recorrido programado de un tren en un día de servicio, con la hora en cada parada y, si se
+ * pasa `live`, el retraso con el que pasó por las que ya ha dejado atrás.
+ */
+export function getTripTimes(data: GtfsData, tripId: string, date: string, live?: LiveContext): TripTimes | null {
   const trip = data.trips.get(tripId);
   const stopIds = data.tripStops.get(tripId);
   if (!trip || !stopIds) return null;
 
+  const base = serviceDayBase(date);
+  const obs = live?.observed(date, tripId) ?? null;
   const stops: TripTimes['stops'] = [];
   let lastSeq = -Infinity;
   stopIds.forEach((stopId, i) => {
@@ -87,7 +129,9 @@ export function getTripTimes(data: GtfsData, tripId: string): TripTimes | null {
     if (!st) return;
     lastSeq = st.seq;
     const isLast = i === stopIds.length - 1;
-    stops.push({ stopId, name: data.stops.get(stopId)?.name ?? stopId, t: isLast ? st.arr : st.dep });
+    const t = isLast ? st.arr : st.dep;
+    const passed = live ? passedAt(obs, i, base, t, live.nowMs) : undefined;
+    stops.push({ stopId, name: data.stops.get(stopId)?.name ?? stopId, t, ...(passed ? { passed } : {}) });
   });
 
   const number = trainNumber(tripId);
@@ -96,6 +140,8 @@ export function getTripTimes(data: GtfsData, tripId: string): TripTimes | null {
     ...(number ? { trainNumber: number } : {}),
     line: data.lines.get(trip.routeId) ?? UNKNOWN_LINE,
     headsign: destination(data, trip.lastStopId, trip.headsign),
+    base,
+    cancelled: !!obs?.cancelled,
     stops,
   };
 }

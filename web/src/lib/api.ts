@@ -56,8 +56,9 @@ export const fetchArrivals = (stopId: string, signal?: AbortSignal) =>
 export const fetchTimetable = (stopId: string, day: 0 | 1, signal?: AbortSignal) =>
   get<StopTimetable>(`/api/stops/${encodeURIComponent(stopId)}/timetable?day=${day}`, signal);
 
-export const fetchTripTimes = (tripId: string, signal?: AbortSignal) =>
-  get<TripTimes>(`/api/trips/${encodeURIComponent(tripId)}/stops`, signal);
+/** Recorrido del tren: 0 = hoy (con la hora real en las paradas ya pasadas), 1 = mañana. */
+export const fetchTripTimes = (tripId: string, day: 0 | 1, signal?: AbortSignal) =>
+  get<TripTimes>(`/api/trips/${encodeURIComponent(tripId)}/stops?day=${day}`, signal);
 
 export const fetchTripLive = (tripId: string, signal?: AbortSignal) =>
   get<TripLive>(`/api/trips/${encodeURIComponent(tripId)}/live`, signal);

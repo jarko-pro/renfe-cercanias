@@ -1189,14 +1189,50 @@ button.arrival.following.dx {
   outline: 2px solid var(--brand);
   outline-offset: 1px;
 }
-.tt-min.past {
-  color: var(--text-2);
-  opacity: 0.55;
-}
+/* El próximo tren: recuadro (el verde ya significa "pasó en hora"). */
 .tt-min.next {
+  box-shadow: inset 0 0 0 2px var(--text);
+  font-weight: 700;
+}
+/* Ya pasados: hora real con la escala de retraso de la lista (verde → rojo). */
+.tt-min.done,
+.tt-time.done {
+  font-weight: 600;
+}
+.done.d0 {
   background: var(--live-bg);
   color: var(--live);
-  font-weight: 700;
+}
+.done.d1 {
+  background: var(--d1-bg);
+  color: var(--d1);
+}
+.done.d2 {
+  background: var(--d2-bg);
+  color: var(--d2);
+}
+.done.d3 {
+  background: var(--d3-bg);
+  color: var(--d3);
+}
+.done.d4 {
+  background: var(--danger-bg);
+  color: var(--danger);
+}
+/* Sin datos de Renfe: la hora programada, en gris. */
+.done.dx {
+  color: var(--text-2);
+  font-weight: 400;
+  opacity: 0.6;
+}
+.done.cancelled {
+  color: var(--danger);
+  font-weight: 400;
+  text-decoration: line-through;
+  opacity: 0.7;
+}
+.tt-min.done:hover {
+  filter: brightness(0.95);
 }
 .tt-min sup,
 .tt-notes sup {
@@ -1233,7 +1269,10 @@ button.arrival.following.dx {
 }
 .tt-time {
   flex: none;
-  width: 44px;
+  width: 52px;
+  padding: 1px 0;
+  border-radius: 6px;
+  text-align: center;
   font-variant-numeric: tabular-nums;
   color: var(--text-2);
 }
@@ -1251,7 +1290,7 @@ button.arrival.following.dx {
 .tt-trip li::before {
   content: '';
   position: absolute;
-  left: 76px;
+  left: 84px;
   top: 0;
   bottom: 0;
   width: 4px;
@@ -1270,9 +1309,17 @@ button.arrival.following.dx {
   background: var(--surface-2);
   font-weight: 700;
 }
-.tt-trip li.here .tt-time {
+.tt-trip li.here .tt-time:not(.done) {
   color: var(--text);
 }
 .tt-trip li.here .tt-dot {
   background: var(--line);
+}
+.tt-dir .badge {
+  margin-left: 6px;
+}
+.tt-alerts {
+  flex: none;
+  max-height: 40%;
+  overflow: auto;
 }

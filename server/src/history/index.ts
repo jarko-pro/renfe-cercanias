@@ -3,7 +3,7 @@ import type { GtfsData } from '../gtfs/types.js';
 import type { RealtimeState } from '../realtime/poller.js';
 import { localDate } from '../time.js';
 import { createCollector, type TrainRun } from './collector.js';
-import { insertRuns, migrate, purgeOld, type Db } from './db.js';
+import { insertRuns, loadRecentRuns, migrate, purgeOld, type Db } from './db.js';
 import { loadInsights, type Insights } from './insights.js';
 
 const FLUSH_MS = 5 * 60_000;
@@ -122,11 +122,22 @@ export function createHistory(
     try {
       ready ??= migrate(db);
       await ready;
+      const recent = await loadRecentRuns(db);
+      collector.restore(recent);
+      log.info(`Histórico: ${recent.length} viajes recientes recuperados para el horario`);
       await refreshInsights(localDate(Date.now()), Date.now());
     } catch (err) {
       ready = null;
       log.warn(`Error preparando el histórico: ${(err as Error).message}`);
     }
   })();
-  return { observe, flush, status, insights: () => insights, stop: () => clearInterval(timer) };
+  return {
+    observe,
+    flush,
+    status,
+    insights: () => insights,
+    /** Retrasos de un viaje de hoy o de ayer (en curso o terminado), para el horario. */
+    observed: collector.observed,
+    stop: () => clearInterval(timer),
+  };
 }

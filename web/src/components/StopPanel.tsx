@@ -2,7 +2,7 @@ import type { Arrival, ArrivalsResponse, Stop, StopAlert, TripLive } from '@renf
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { track } from '../lib/analytics';
 import { ApiError, fetchArrivals, isAbort } from '../lib/api';
-import { formatTime } from '../lib/text';
+import { delayClass, formatTime } from '../lib/text';
 import { LineChip } from './LineChip';
 import { Timetable } from './Timetable';
 
@@ -116,15 +116,6 @@ interface RowProps {
   onTrack: (a: Arrival) => void;
   /** Tarjeta del tren seguido en el móvil: el icono va junto al destino en vez de abajo. */
   compact?: boolean;
-}
-
-/** Color del retraso: verde en hora, verde amarillento 1-2 min, amarillo 3-5, naranja 6-10, rojo más. */
-export function delayClass(min: number): string {
-  if (min <= 0) return 'd0';
-  if (min <= 2) return 'd1';
-  if (min <= 5) return 'd2';
-  if (min <= 10) return 'd3';
-  return 'd4';
 }
 
 function ArrivalRow({ a, now, live, onTrack, compact = false }: RowProps) {
@@ -399,6 +390,12 @@ export function StopPanel({ stop, isFavorite, onToggleFavorite, onClose, tracked
         </button>
       </header>
 
+      {/* En el horario, los avisos se abren encima, con su propio scroll para no tapar el horario. */}
+      {timetable && showAlerts && (
+        <div className="tt-alerts">
+          <AlertList alerts={alerts} />
+        </div>
+      )}
       {timetable && <Timetable stop={stop} initialLine={lineFilter[0]} onBack={() => setView('live')} />}
 
       {!timetable && banner && !showAlerts && (

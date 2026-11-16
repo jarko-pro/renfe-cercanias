@@ -19,6 +19,25 @@ export interface TrainRun {
   delays: (number | null)[];
 }
 
+/** Lo que se sabe de un viaje de hoy o de ayer: en curso o ya terminado. */
+export interface Observed {
+  stops: string[];
+  /** Último retraso (s) previsto o con el que pasó por cada parada; null si no hubo dato. */
+  delays: (number | null)[];
+  cancelled: boolean;
+  /** no_data: terminó sin que Renfe publicara nada. */
+  status: 'running' | TrainRun['status'];
+}
+
+/** Un viaje ya guardado en la base de datos, para recuperarlo al arrancar. */
+export interface StoredRun {
+  date: string; // YYYYMMDD
+  trip_id: string;
+  status: TrainRun['status'];
+  stops: string[];
+  delays: (number | null)[];
+}
+
 interface Tracked {
   date: string;
   stops: string[];
@@ -61,6 +80,8 @@ const isoDate =(d: string) => `${d.slice(0, 4)}-${d.slice(4, 6)}-${d.slice(6, 8)
 export function createCollector(startedAt: number) {
   const tracked = new Map<string, Tracked>(); // `${date}|${tripId}`
   const done = new Set<string>();
+  // Viajes terminados de hoy y ayer: el horario muestra a qué hora pasaron de verdad.
+  const finished = new Map<string, Observed>();
   const outages: [number, number][] = [];
   let lastObs: number | null = null;
 
@@ -147,7 +168,9 @@ export function createCollector(startedAt: number) {
       if (sp && nowMs < sp[1] + Math.max(0, t.lastDelay) * 1000 + END_MARGIN_MS) continue;
       tracked.delete(key);
       done.add(key);
-      run(tripId, t.date, t.cancelled ? 'cancelled' : 'ok', t);
+      const status = t.cancelled ? 'cancelled' : 'ok';
+      run(tripId, t.date, status, t);
+      finished.set(key, { stops: t.stops, delays: t.delays, cancelled: t.cancelled, status });
     }
 
     // Viajes que Renfe nunca publicó. Solo si los vimos enteros: tras arrancar y sin caídas del feed.
@@ -163,16 +186,40 @@ export function createCollector(startedAt: number) {
         done.add(key);
         const watched =
           sp[0] >= startedAt && lastObs != null && lastObs >= sp[1] && !outages.some(([a, b]) => a < sp[1] && b > sp[0]);
-        if (watched) run(tripId, date, 'no_data');
+        if (watched) {
+          run(tripId, date, 'no_data');
+          const stops = data.tripStops.get(tripId) ?? [];
+          finished.set(key, { stops, delays: stops.map(() => null), cancelled: false, status: 'no_data' });
+        }
       }
     }
 
     // Olvida lo de hace más de dos días.
     const keep = addDays(today, -2);
     for (const key of done) if (key.slice(0, 8) < keep) done.delete(key);
+    const keepFinished = addDays(today, -1);
+    for (const key of finished.keys()) if (key.slice(0, 8) < keepFinished) finished.delete(key);
     while (outages.length && outages[0][1] < nowMs - 2 * 86_400_000) outages.shift();
     return out;
   }
 
-  return { observe, collect, pending: () => tracked.size };
+  /** Qué se sabe de un viaje en un día de servicio (YYYYMMDD): en curso, terminado o nada. */
+  function observed(date: string, tripId: string): Observed | null {
+    const key = `${date}|${tripId}`;
+    const t = tracked.get(key);
+    if (t) return { stops: t.stops, delays: t.delays, cancelled: t.cancelled, status: 'running' };
+    return finished.get(key) ?? null;
+  }
+
+  /** Recupera los viajes ya guardados (tras reiniciar el servidor, la memoria empieza vacía). */
+  function restore(runs: StoredRun[]) {
+    for (const r of runs) {
+      const key = `${r.date}|${r.trip_id}`;
+      if (tracked.has(key)) continue;
+      done.add(key);
+      finished.set(key, { stops: r.stops, delays: r.delays, cancelled: r.status === 'cancelled', status: r.status });
+    }
+  }
+
+  return { observe, collect, observed, restore, pending: () => tracked.size };
 }

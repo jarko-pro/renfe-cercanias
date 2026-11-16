@@ -145,7 +145,16 @@ export interface TimetableGroup {
   /** Otros destinos de algunos trenes, marcados con una letra en su hora. */
   notes: { mark: string; headsign: string }[];
   /** Salidas en orden; `t` en segundos desde el inicio del día de servicio (puede pasar de 24 h). */
-  trains: { tripId: string; t: number; mark?: string }[];
+  trains: { tripId: string; t: number; mark?: string; passed?: Passed }[];
+}
+
+/**
+ * Un tren que ya ha pasado por la parada: con qué retraso (según Renfe al pasar) o null si
+ * Renfe no dio ningún dato. Solo en el horario de hoy.
+ */
+export interface Passed {
+  delaySec: number | null;
+  cancelled?: boolean;
 }
 
 /** Horario programado de una estación para un día (sin tiempo real). */
@@ -164,8 +173,11 @@ export interface TripTimes {
   trainNumber?: string;
   line: Line;
   headsign: string;
+  /** Inicio del día de servicio (epoch ms): hora real = base + t·1000. */
+  base: number;
+  cancelled: boolean;
   /** `t` en segundos desde el inicio del día de servicio (salida; llegada en la última). */
-  stops: { stopId: string; name: string; t: number }[];
+  stops: { stopId: string; name: string; t: number; passed?: Passed }[];
 }
 
 export * from './slug';

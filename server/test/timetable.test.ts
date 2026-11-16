@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { buildGtfsData } from '../src/gtfs/build.js';
 import type { GtfsSource } from '../src/gtfs/types.js';
+import type { Observed } from '../src/history/collector.js';
 import { getStopTimetable, getTripTimes } from '../src/timetable.js';
 import { serviceDayBase } from '../src/time.js';
 
@@ -101,7 +102,7 @@ describe('getStopTimetable', () => {
 describe('getTripTimes', () => {
   it('lista las paradas con la salida de cada una y la llegada en la última', async () => {
     const data = await buildGtfsData(source(FILES), TODAY);
-    const trip = getTripTimes(data, 'A1')!;
+    const trip = getTripTimes(data, 'A1', TODAY)!;
     expect(trip.line.name).toBe('C1');
     expect(trip.headsign).toBe('Destino');
     expect(trip.stops).toEqual([
@@ -109,6 +110,41 @@ describe('getTripTimes', () => {
       { stopId: 'S2', name: 'Atocha', t: 8 * 3600 + 11 * 60 },
       { stopId: 'S3', name: 'Destino', t: 8 * 3600 + 20 * 60 },
     ]);
-    expect(getTripTimes(data, 'NOPE')).toBeNull();
+    expect(getTripTimes(data, 'NOPE', TODAY)).toBeNull();
+  });
+});
+
+describe('trenes ya pasados', () => {
+  const base = serviceDayBase(TODAY);
+  const at = (hh: number, mm: number) => base + (hh * 3600 + mm * 60) * 1000;
+  const obs: Record<string, Observed> = {
+    // A1: Renfe solo dio retraso en la primera parada (+3 min): vale también para Atocha.
+    A1: { stops: ['S1', 'S2', 'S3'], delays: [180, null, null], cancelled: false, status: 'ok' },
+    // A2: va con +10 min, todavía no ha llegado a Atocha a las 09:15.
+    A2: { stops: ['S1', 'S2', 'S3'], delays: [600, 600, 600], cancelled: false, status: 'running' },
+    B1: { stops: ['S3', 'S2', 'S1'], delays: [null, null, null], cancelled: true, status: 'cancelled' },
+  };
+  const live = { nowMs: at(9, 15), observed: (_d: string, id: string) => obs[id] ?? null };
+
+  it('marca en el horario de hoy los que han pasado, con su retraso', async () => {
+    const data = await buildGtfsData(source(FILES), TODAY);
+    const tt = getStopTimetable(data, 'S2', TODAY, live)!;
+    const [ida, vuelta, c3] = tt.groups;
+    expect(ida.trains.map((t) => t.passed)).toEqual([{ delaySec: 180 }, undefined, undefined]);
+    expect(vuelta.trains[0].passed).toEqual({ delaySec: null, cancelled: true });
+    // C1 (10:00) aún no toca.
+    expect(c3.trains[0].passed).toBeUndefined();
+    // Sin datos de un tren que ya debería haber pasado: pasado, sin retraso conocido.
+    const later = getStopTimetable(data, 'S2', TODAY, { ...live, nowMs: at(10, 5) })!;
+    expect(later.groups[2].trains[0].passed).toEqual({ delaySec: null });
+    // Sin `live` (mañana) no se marca nada.
+    expect(getStopTimetable(data, 'S2', TODAY)!.groups[0].trains.every((t) => !t.passed)).toBe(true);
+  });
+
+  it('el recorrido lleva el retraso en las paradas ya pasadas', async () => {
+    const data = await buildGtfsData(source(FILES), TODAY);
+    const trip = getTripTimes(data, 'A2', TODAY, live)!;
+    expect(trip.stops.map((s) => s.passed)).toEqual([{ delaySec: 600 }, undefined, undefined]);
+    expect(getTripTimes(data, 'B1', TODAY, live)!.cancelled).toBe(true);
   });
 });
