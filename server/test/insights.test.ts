@@ -17,8 +17,8 @@ const run = (date: string, train: string, over: Partial<TrainRun> = {}): TrainRu
   ...over,
 });
 
-// Laborables limpios: del lunes 16 al viernes 20 de noviembre de 2026.
-const WEEK = ['2026-11-16', '2026-11-17', '2026-11-18', '2026-11-19', '2026-11-20'];
+// Laborables limpios: del lunes 23 al viernes 27 de noviembre de 2026 (el 17 es día de huelga).
+const WEEK = ['2026-11-23', '2026-11-24', '2026-11-25', '2026-11-26', '2026-11-27'];
 const SATURDAYS = ['2026-11-07', '2026-11-14', '2026-11-21', '2026-11-28'];
 
 let pg: PGlite;
@@ -47,7 +47,7 @@ beforeAll(async () => {
   runs.push(run('2026-11-21', '19799', { delays: [0, 0, 0] }));
   // 19807: 4 sábados con 5 min en S2 y 2 laborables en hora.
   for (const d of SATURDAYS) runs.push(run(d, '19807', { delays: [0, 300, 300] }));
-  runs.push(run('2026-11-16', '19807', { delays: [0, 0, 0] }), run('2026-11-17', '19807', { delays: [0, 0, 0] }));
+  runs.push(run('2026-11-23', '19807', { delays: [0, 0, 0] }), run('2026-11-24', '19807', { delays: [0, 0, 0] }));
   // "Hoy" (a medias): no cuenta.
   runs.push(run('2026-11-30', '19799', { delays: [3600, 3600, 3600] }));
   await insertRuns(db, runs);
@@ -66,7 +66,7 @@ describe('dayType', () => {
 
 describe('loadInsights', () => {
   it('usa solo días limpios y completos', () => {
-    expect(ins.days).toBe(10); // 9, 16-20 y 4 sábados; ni la huelga, ni antes del inicio, ni hoy
+    expect(ins.days).toBe(10); // 9, 23-27 y 4 sábados; ni la huelga, ni antes del inicio, ni hoy
   });
 
   it('da cómo suele llegar un tren a cada parada', () => {

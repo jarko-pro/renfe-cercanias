@@ -9,9 +9,9 @@ import type { Db } from './db.js';
 export const CLEAN_FROM = '2026-11-06';
 /**
  * Días que no cuentan como normales (huelgas, temporales, cortes grandes...).
- * 10 y 12-11-2026: huelga de maquinistas (Semaf); 11-11-2026: huelga general.
+ * 10 y 12-11-2026: huelga de maquinistas (Semaf); 11-11-2026: huelga general; 17-11-2026: huelga.
  */
-export const EXCLUDED_DAYS: string[] = ['2026-11-10', '2026-11-11', '2026-11-12'];
+export const EXCLUDED_DAYS: string[] = ['2026-11-10', '2026-11-11', '2026-11-12', '2026-11-17'];
 /** Festivos nacionales: cuentan como domingo. */
 export const HOLIDAYS = ['2026-12-08', '2026-12-25', '2027-01-01', '2027-01-06'];
 /** Solo se miran las últimas semanas, para que los cambios de horario no arrastren datos viejos. */
