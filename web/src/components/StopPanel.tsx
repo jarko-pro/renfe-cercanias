@@ -205,7 +205,7 @@ function ArrivalRow({ a, now, live, onTrack, compact = false }: RowProps) {
                 className="badge unconfirmed"
                 title={
                   lost
-                    ? `Renfe no da datos de este tren desde las ${formatTime(a.lastSeenAt!)}: puede ir con más retraso o estar cancelado`
+                    ? `Renfe dejó de dar datos de este tren a las ${formatTime(a.lastSeenAt!)}, antes de salir de su origen: puede no llegar a salir`
                     : 'Renfe no da datos en tiempo real de este tren: puede ir con retraso o estar cancelado'
                 }
               >

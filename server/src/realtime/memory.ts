@@ -21,8 +21,6 @@ export interface Remembered {
 
 /** Hueco tan corto que no se nota: se sigue mostrando como dato en directo. */
 export const BLIP_MS = 2 * 60_000;
-/** Hasta aquí un tren que se ha movido sale "sin señal" con su último retraso; luego, "Sin confirmar". */
-export const SIGNAL_LOST_MS = 20 * 60_000;
 /** Se olvida el tren pasado este tiempo sin ningún dato (antes ya habrá llegado a su destino). */
 const FORGET_MS = 3 * 3600_000;
 

@@ -316,21 +316,33 @@ describe('getArrivals', () => {
       expect(a.lastSeenAt).toBeUndefined();
     });
 
-    it('pasados 20 min sin datos pasa a "sin confirmar", pero con su último retraso', async () => {
+    it('si ya había salido, sigue "sin señal" aunque lleve mucho sin datos', async () => {
       const data = await buildGtfsData(source(FILES), TODAY);
       const a = findA(getArrivals(data, lost(enMarcha(at(TODAY, 8, 5), 1800)), 'S2', at(TODAY, 8, 30)))!;
-      expect(a.unconfirmed).toBe(true);
+      expect(a.unconfirmed).toBe(false);
       expect(a.delaySec).toBe(1800);
       expect(a.lastSeenAt).toBe(at(TODAY, 8, 5));
+      expect(a.hasPosition).toBe(true);
     });
 
-    it('si se perdió sin salir de su origen, queda "sin confirmar" con su retraso', async () => {
+    it('si se perdió sin salir de su origen: "sin confirmar" con su retraso y sin posición', async () => {
       const data = await buildGtfsData(source(FILES), TODAY);
       const seen = at(TODAY, 8, 5);
       const m: Remembered = { rt: lostRt(900), rtAt: seen, vehicle: veh('S1', 'stopped'), vehicleAt: seen };
       const a = findA(getArrivals(data, lost(m), 'S2', at(TODAY, 8, 10)))!;
       expect(a.unconfirmed).toBe(true);
       expect(a.delaySec).toBe(900);
+      expect(a.hasPosition).toBe(false);
+    });
+
+    it('en tránsito junto a su origen aún no cuenta como salido', async () => {
+      const data = await buildGtfsData(source(FILES), TODAY);
+      const seen = at(TODAY, 8, 5);
+      // S1 está en 40.0, -3.0: a pocos metros, arrancando.
+      const cerca: VehicleState = { lat: 40.0005, lon: -3.0, stopId: 'S1', status: 'in_transit', timestamp: null };
+      const a = findA(getArrivals(data, lost({ rt: lostRt(0), rtAt: seen, vehicle: cerca, vehicleAt: seen }), 'S2', at(TODAY, 8, 9)))!;
+      expect(a.unconfirmed).toBe(true);
+      expect(a.hasPosition).toBe(false);
     });
 
     it('sin posición, cuenta como en marcha si por horario y retraso ya había salido', async () => {
@@ -382,16 +394,17 @@ describe('getArrivals', () => {
       expect(res.find((a) => a.tripId === 'B')).toBeUndefined();
     });
 
-    it('si se sigue viendo en el mapa, sigue "sin señal" aunque el retraso tenga más de 20 min', async () => {
+    it('con retraso en directo pero la posición perdida en su origen, tampoco se puede seguir', async () => {
       const data = await buildGtfsData(source(FILES), TODAY);
+      const seen = at(TODAY, 7, 50);
       const rt = {
-        trips: new Map<string, TripRealtime>(),
-        vehicles: new Map([['A', veh('S1', 'in_transit')]]),
-        memory: new Map([['A', enMarcha(at(TODAY, 8, 5), 1800)]]),
+        trips: new Map<string, TripRealtime>([['A', lostRt(600)]]),
+        vehicles: new Map<string, VehicleState>(),
+        memory: new Map([['A', { vehicle: veh('S1', 'stopped'), vehicleAt: seen }]]),
       };
-      const a = findA(getArrivals(data, rt, 'S2', at(TODAY, 8, 30)))!;
-      expect(a.unconfirmed).toBe(false);
-      expect(a.delaySec).toBe(1800);
+      const a = findA(getArrivals(data, rt, 'S2', at(TODAY, 8, 0)))!;
+      expect(a.realtime).toBe(true);
+      expect(a.hasPosition).toBe(false);
     });
   });
 

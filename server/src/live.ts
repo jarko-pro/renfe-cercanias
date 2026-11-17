@@ -1,5 +1,5 @@
 import type { TripLive } from '@renfe/shared';
-import type { RealtimeView } from './arrivals.js';
+import { leftOrigin, type RealtimeView } from './arrivals.js';
 import type { GtfsData } from './gtfs/types.js';
 import { BLIP_MS } from './realtime/memory.js';
 import type { TripRealtime } from './realtime/poller.js';
@@ -57,5 +57,7 @@ export function tripLiveNow(data: GtfsData, tripId: string, realtime: RealtimeVi
   const v = liveV ?? mem?.vehicle;
   const rt = realtime.trips.get(tripId) ?? mem?.rt;
   const lost = !liveV && mem?.vehicle && mem.vehicleAt != null && nowMs - mem.vehicleAt > BLIP_MS;
+  // Perdido sin salir de su origen: no se da su última posición (puede no llegar a salir).
+  if (lost && !leftOrigin(data, tripId, mem.vehicle!)) return buildTripLive(data, tripId, undefined, rt);
   return buildTripLive(data, tripId, v, rt, lost ? mem.vehicleAt : undefined);
 }

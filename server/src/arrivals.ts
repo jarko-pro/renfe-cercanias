@@ -1,6 +1,6 @@
 import type { Arrival } from '@renfe/shared';
 import type { GtfsData } from './gtfs/types.js';
-import { BLIP_MS, SIGNAL_LOST_MS, type Remembered } from './realtime/memory.js';
+import { BLIP_MS, type Remembered } from './realtime/memory.js';
 import type { StopUpdate, TripRealtime } from './realtime/poller.js';
 import type { VehicleState } from './realtime/vehicles.js';
 import { trainNumber } from './gtfs/networks.js';
@@ -74,6 +74,9 @@ export function getArrivals(
       // El tren ha dejado de salir en el feed de retrasos: el retraso es el último que dio Renfe.
       const rtLost = rtAge != null && rtAge > BLIP_MS;
       const vehicleLost = vehicleAge != null && vehicleAge > BLIP_MS;
+      // Se perdió sin salir de su origen: su última posición no dice nada (puede no llegar a
+      // salir), así que no se puede seguir en el mapa.
+      const stuckAtOrigin = vehicleLost && vehicle != null && !leftOrigin(data, st.tripId, vehicle);
 
       const rtStop = rtTrip?.stops.get(stopId);
       const delaySec = rtTrip ? realtimeDelaySec(data, st.tripId, stopId, base, rtTrip) : null;
@@ -92,11 +95,9 @@ export function getArrivals(
 
       let unconfirmed: boolean;
       if (rtLost) {
-        // Si ya iba en marcha y hace poco que se perdió (o se sigue viendo en el mapa), sale
-        // "sin señal" con su último retraso. Si no, "Sin confirmar", pero con ese retraso.
-        const lastSeen = nowMs - rtAge;
-        const moved = hasMoved(data, st.tripId, base, vehicle, delaySec, lastSeen);
-        unconfirmed = !(moved && (rtAge <= SIGNAL_LOST_MS || (vehicleAge != null && vehicleAge <= BLIP_MS)));
+        // Si ya había salido de su origen, "sin señal" con su último retraso. Si no, "Sin
+        // confirmar" (con ese retraso): son casos distintos, el segundo puede no llegar a salir.
+        unconfirmed = !hasMoved(data, st.tripId, base, vehicle, delaySec, nowMs - rtAge);
       } else {
         const heard = rtTrip != null || (vehicleAge != null && !vehicleLost);
         unconfirmed = !heard && departsFromOriginBy(data, st.tripId, base) <= nowMs + UNCONFIRMED_AHEAD_MS;
@@ -130,7 +131,7 @@ export function getArrivals(
         ...(rtLost ? { lastSeenAt: nowMs - rtAge } : {}),
         cancelled: !!rtTrip?.cancelled || !!rtStop?.skipped,
         terminates: trip.lastStopId === stopId,
-        hasPosition: vehicle?.lat != null && vehicle.lon != null,
+        hasPosition: vehicle?.lat != null && vehicle.lon != null && !stuckAtOrigin,
         ...(pos ? { vehicleStatus: pos } : {}),
         ...(pos && vehicle?.platform ? { platform: vehicle.platform } : {}),
       });
@@ -167,16 +168,19 @@ function hasMoved(
   delaySec: number | null,
   lastSeen: number,
 ): boolean {
-  const stops = data.tripStops.get(tripId) ?? [];
-  const i = v ? stops.indexOf(v.stopId) : -1;
-  if (i > 0) return true;
-  if (v && i === 0) {
-    // "En tránsito" con la de origen: Renfe da la parada que acaba de dejar.
-    if (v.status !== 'in_transit') return false;
-    const s = data.stops.get(stops[0]);
-    return !s || v.lat == null || v.lon == null || distM(s.lat, s.lon, v.lat, v.lon) > PASSED_M;
-  }
+  if (v && data.tripStops.get(tripId)?.includes(v.stopId)) return leftOrigin(data, tripId, v);
   return departsFromOriginBy(data, tripId, base) + Math.max(0, delaySec ?? 0) * 1000 <= lastSeen;
+}
+
+/** Según su posición, ¿ha salido ya el tren de su primera parada? */
+export function leftOrigin(data: GtfsData, tripId: string, v: VehicleState): boolean {
+  const stops = data.tripStops.get(tripId) ?? [];
+  const i = stops.indexOf(v.stopId);
+  if (i !== 0) return true;
+  // "En tránsito" con la de origen: Renfe da la parada que acaba de dejar.
+  if (v.status !== 'in_transit') return false;
+  const s = data.stops.get(stops[0]);
+  return !s || v.lat == null || v.lon == null || distM(s.lat, s.lon, v.lat, v.lon) > PASSED_M;
 }
 
 /** Hora programada de salida del viaje desde su primera parada (epoch ms). */

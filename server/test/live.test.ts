@@ -58,6 +58,13 @@ describe('tripLiveNow', () => {
     expect(live.lastSeenAt).toBe(1000);
   });
 
+  it('perdido sin salir de su origen: no da su última posición', () => {
+    const memory = new Map([['T', { vehicle: veh('A', 'stopped'), vehicleAt: 1000 }]]);
+    const live = tripLiveNow(data, 'T', { trips: new Map(), vehicles: new Map(), memory }, 1000 + 5 * 60_000)!;
+    expect(live.position).toBeNull();
+    expect(live.lastSeenAt).toBeUndefined();
+  });
+
   it('con la posición en el feed no hay lastSeenAt', () => {
     const live = tripLiveNow(data, 'T', { trips: new Map(), vehicles: new Map([['T', veh('B', 'stopped')]]) }, 5000)!;
     expect(live.lastSeenAt).toBeUndefined();
