@@ -1,10 +1,8 @@
 import type { TrainMatch } from '@renfe/shared';
-import { getArrivals } from './arrivals.js';
+import { getArrivals, type RealtimeView } from './arrivals.js';
 import { networkOf, trainNumber } from './gtfs/networks.js';
 import type { GtfsData } from './gtfs/types.js';
 import { nextStopId } from './live.js';
-import type { TripRealtime } from './realtime/poller.js';
-import type { VehicleState } from './realtime/vehicles.js';
 import { addDays, localDate, serviceDayBase } from './time.js';
 
 export { trainNumber };
@@ -19,7 +17,7 @@ const HIDE_AFTER_MS = 30_000;
  */
 function shownAt(
   data: GtfsData,
-  realtime: { trips: Map<string, TripRealtime>; vehicles: Map<string, VehicleState> },
+  realtime: RealtimeView,
   tripId: string,
   stopId: string,
   nowMs: number,
@@ -55,7 +53,7 @@ const DONE_AFTER_MS = 2 * 60_000;
  */
 export function findTrains(
   data: GtfsData,
-  realtime: { trips: Map<string, TripRealtime>; vehicles: Map<string, VehicleState> },
+  realtime: RealtimeView,
   number: string,
   nowMs: number,
 ): TrainMatch[] {
@@ -74,8 +72,10 @@ export function findTrains(
     const last = times[times.length - 1];
     if (!first || !last) continue;
 
-    const rt = realtime.trips.get(tripId);
-    const v = realtime.vehicles.get(tripId);
+    // Si ha dejado de salir en los feeds, con su último dato (un tren no va hacia atrás).
+    const mem = realtime.memory?.get(tripId);
+    const rt = realtime.trips.get(tripId) ?? mem?.rt;
+    const v = realtime.vehicles?.get(tripId) ?? mem?.vehicle;
     const delayMs = Math.max(0, rt?.delaySec ?? 0) * 1000;
     const departure = base + first.dep * 1000;
     if (rt?.cancelled || nowMs > base + last.arr * 1000 + delayMs + DONE_AFTER_MS) continue;

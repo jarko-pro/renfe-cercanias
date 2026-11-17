@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { getArrivals, minutesUntil } from '../src/arrivals.js';
 import { buildGtfsData } from '../src/gtfs/build.js';
 import type { GtfsSource } from '../src/gtfs/types.js';
+import type { Remembered } from '../src/realtime/memory.js';
 import type { TripRealtime } from '../src/realtime/poller.js';
 import type { VehicleState } from '../src/realtime/vehicles.js';
 import { serviceDayBase } from '../src/time.js';
@@ -264,6 +265,133 @@ describe('getArrivals', () => {
       const [a] = getArrivals(data, withVeh(veh('S1', 'stopped', '1')), 'S1', at(TODAY, 7, 55));
       expect(a.tripId).toBe('A');
       expect(a.vehicleStatus).toBe('at_platform');
+    });
+  });
+
+  // Renfe deja de publicar a veces un tren a mitad de recorrido (sobre todo en huelgas).
+  describe('trenes que dejan de dar señal', () => {
+    const lostRt = (delaySec: number): TripRealtime => ({ delaySec, cancelled: false, stops: new Map() });
+    const veh = (stopId: string, status: VehicleState['status']): VehicleState => ({
+      lat: 40.2,
+      lon: -3.3,
+      stopId,
+      status,
+      timestamp: null,
+    });
+    /** Nada en la última lectura de los feeds; en memoria, lo último que se supo de A (o de `id`). */
+    const lost = (m: Remembered, id = 'A') => ({
+      trips: new Map<string, TripRealtime>(),
+      vehicles: new Map<string, VehicleState>(),
+      memory: new Map([[id, m]]),
+    });
+    // A: S1 08:00 → S2 08:10 → S3 08:20. Perdido en marcha desde S1 y con +15 min.
+    const enMarcha = (seenAt: number, delay = 900): Remembered => ({
+      rt: lostRt(delay),
+      rtAt: seenAt,
+      vehicle: veh('S1', 'in_transit'),
+      vehicleAt: seenAt,
+    });
+    const findA = (res: ReturnType<typeof getArrivals>) => res.find((a) => a.tripId === 'A');
+
+    it('mantiene su último retraso en vez de volver a la hora programada', async () => {
+      const data = await buildGtfsData(source(FILES), TODAY);
+      const now = at(TODAY, 8, 12);
+      // Sin memoria, el tren (08:10 programado) ya habría desaparecido de la estación.
+      expect(findA(getArrivals(data, noRt, 'S2', now))).toBeUndefined();
+      const a = findA(getArrivals(data, lost(enMarcha(at(TODAY, 8, 5))), 'S2', now))!;
+      expect(a.delaySec).toBe(900);
+      expect(a.estimated).toBe(at(TODAY, 8, 25));
+      expect(a.realtime).toBe(false);
+      expect(a.unconfirmed).toBe(false);
+      expect(a.lastSeenAt).toBe(at(TODAY, 8, 5));
+      expect(a.hasPosition).toBe(true);
+    });
+
+    it('un hueco de menos de 2 min no se nota: sigue como dato en directo', async () => {
+      const data = await buildGtfsData(source(FILES), TODAY);
+      const seen = at(TODAY, 8, 5);
+      const a = findA(getArrivals(data, lost(enMarcha(seen)), 'S2', seen + 90_000))!;
+      expect(a.realtime).toBe(true);
+      expect(a.delaySec).toBe(900);
+      expect(a.lastSeenAt).toBeUndefined();
+    });
+
+    it('pasados 20 min sin datos pasa a "sin confirmar", pero con su último retraso', async () => {
+      const data = await buildGtfsData(source(FILES), TODAY);
+      const a = findA(getArrivals(data, lost(enMarcha(at(TODAY, 8, 5), 1800)), 'S2', at(TODAY, 8, 30)))!;
+      expect(a.unconfirmed).toBe(true);
+      expect(a.delaySec).toBe(1800);
+      expect(a.lastSeenAt).toBe(at(TODAY, 8, 5));
+    });
+
+    it('si se perdió sin salir de su origen, queda "sin confirmar" con su retraso', async () => {
+      const data = await buildGtfsData(source(FILES), TODAY);
+      const seen = at(TODAY, 8, 5);
+      const m: Remembered = { rt: lostRt(900), rtAt: seen, vehicle: veh('S1', 'stopped'), vehicleAt: seen };
+      const a = findA(getArrivals(data, lost(m), 'S2', at(TODAY, 8, 10)))!;
+      expect(a.unconfirmed).toBe(true);
+      expect(a.delaySec).toBe(900);
+    });
+
+    it('sin posición, cuenta como en marcha si por horario y retraso ya había salido', async () => {
+      const data = await buildGtfsData(source(FILES), TODAY);
+      const a = findA(getArrivals(data, lost({ rt: lostRt(120), rtAt: at(TODAY, 8, 5) }), 'S2', at(TODAY, 8, 9)))!;
+      expect(a.unconfirmed).toBe(false);
+      expect(a.lastSeenAt).toBe(at(TODAY, 8, 5));
+    });
+
+    it('sigue en la lista hasta 10 min después de su hora estimada', async () => {
+      const data = await buildGtfsData(source(FILES), TODAY);
+      // Hora estimada en S2: 08:25.
+      const m = lost(enMarcha(at(TODAY, 8, 5)));
+      expect(findA(getArrivals(data, m, 'S2', at(TODAY, 8, 33)))!.minutes).toBe(0);
+      expect(findA(getArrivals(data, m, 'S2', at(TODAY, 8, 36)))).toBeUndefined();
+    });
+
+    it('no vuelve a mostrar un tren que ya había pasado cuando se perdió', async () => {
+      const data = await buildGtfsData(source(FILES), TODAY);
+      // Sin posición, en hora: pasó por S2 a las 08:10 y se perdió a las 08:15.
+      const m = lost({ rt: lostRt(0), rtAt: at(TODAY, 8, 15) });
+      expect(findA(getArrivals(data, m, 'S2', at(TODAY, 8, 18)))).toBeUndefined();
+      // En S3 (08:20) sí sigue: aún no había llegado.
+      expect(findA(getArrivals(data, m, 'S3', at(TODAY, 8, 18)))!.lastSeenAt).toBe(at(TODAY, 8, 15));
+      // Terminó en S3 a las 08:20 y por eso dejó de salir: no reaparece.
+      const fin = lost({ rt: lostRt(0), rtAt: at(TODAY, 8, 21) });
+      expect(findA(getArrivals(data, fin, 'S3', at(TODAY, 8, 24)))).toBeUndefined();
+      // Perdido a una parada del final: en el destino no se le da margen tras su hora.
+      const casi = lost({ ...enMarcha(at(TODAY, 8, 15), 0), vehicle: veh('S2', 'in_transit') });
+      expect(findA(getArrivals(data, casi, 'S3', at(TODAY, 8, 19)))).toBeDefined();
+      expect(findA(getArrivals(data, casi, 'S3', at(TODAY, 8, 21)))).toBeUndefined();
+    });
+
+    it('descarta el tren si su última posición ya estaba más allá de nuestra parada', async () => {
+      const data = await buildGtfsData(source(FILES), TODAY);
+      const m: Remembered = { ...enMarcha(at(TODAY, 8, 5)), vehicle: veh('S3', 'incoming') };
+      expect(findA(getArrivals(data, lost(m), 'S2', at(TODAY, 8, 12)))).toBeUndefined();
+    });
+
+    it('con la última posición en nuestra parada no afirma "En andén"; si es la última, ya ha llegado', async () => {
+      const data = await buildGtfsData(source(FILES), TODAY);
+      const seen = at(TODAY, 8, 8);
+      const enS2: Remembered = { rt: lostRt(0), rtAt: seen, vehicle: veh('S2', 'stopped'), vehicleAt: seen };
+      expect(findA(getArrivals(data, lost(enS2), 'S2', at(TODAY, 8, 12)))!.vehicleStatus).toBeUndefined();
+      // B termina en S2 (08:40): perdido parado allí, ha terminado su recorrido.
+      const bSeen = at(TODAY, 8, 40);
+      const bEnS2: Remembered = { rt: lostRt(0), rtAt: bSeen, vehicle: veh('S2', 'stopped'), vehicleAt: bSeen };
+      const res = getArrivals(data, lost(bEnS2, 'B'), 'S2', at(TODAY, 8, 44));
+      expect(res.find((a) => a.tripId === 'B')).toBeUndefined();
+    });
+
+    it('si se sigue viendo en el mapa, sigue "sin señal" aunque el retraso tenga más de 20 min', async () => {
+      const data = await buildGtfsData(source(FILES), TODAY);
+      const rt = {
+        trips: new Map<string, TripRealtime>(),
+        vehicles: new Map([['A', veh('S1', 'in_transit')]]),
+        memory: new Map([['A', enMarcha(at(TODAY, 8, 5), 1800)]]),
+      };
+      const a = findA(getArrivals(data, rt, 'S2', at(TODAY, 8, 30)))!;
+      expect(a.unconfirmed).toBe(false);
+      expect(a.delaySec).toBe(1800);
     });
   });
 

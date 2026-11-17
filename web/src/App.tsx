@@ -105,7 +105,13 @@ export function App() {
         onSelect={(s) => select(s, false)}
         train={
           tracked && live?.tripId === tracked.tripId && live.position
-            ? { tripId: tracked.tripId, ...live.position, color: tracked.line.color, stale: live.stale }
+            ? {
+                tripId: tracked.tripId,
+                ...live.position,
+                color: tracked.line.color,
+                // En gris también si Renfe ha dejado de darla: es su última posición conocida.
+                stale: live.stale || live.lastSeenAt != null,
+              }
             : null
         }
         route={tracked && routePath.length > 1 ? { path: routePath, color: tracked.line.color } : null}

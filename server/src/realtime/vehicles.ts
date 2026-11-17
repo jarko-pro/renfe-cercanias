@@ -57,7 +57,11 @@ export function parseVehiclePositions(buf: Uint8Array): Map<string, VehicleState
   return out;
 }
 
-export function createVehiclePoller(intervalMs: number, log: (msg: string) => void) {
+export function createVehiclePoller(
+  intervalMs: number,
+  log: (msg: string) => void,
+  onUpdate?: (vehicles: Map<string, VehicleState>, fetchedAt: number) => void,
+) {
   const state: VehiclesState = { fetchedAt: null, vehicles: new Map() };
 
   async function tick() {
@@ -66,6 +70,7 @@ export function createVehiclePoller(intervalMs: number, log: (msg: string) => vo
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       state.vehicles = parseVehiclePositions(new Uint8Array(await res.arrayBuffer()));
       state.fetchedAt = Date.now();
+      onUpdate?.(state.vehicles, state.fetchedAt);
     } catch (err) {
       log(`Error leyendo posiciones de trenes: ${(err as Error).message}`);
     }

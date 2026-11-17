@@ -1,6 +1,7 @@
 import type { Arrival } from '@renfe/shared';
 import type { GtfsData } from './gtfs/types.js';
-import type { RealtimeState, StopUpdate, TripRealtime } from './realtime/poller.js';
+import { BLIP_MS, SIGNAL_LOST_MS, type Remembered } from './realtime/memory.js';
+import type { StopUpdate, TripRealtime } from './realtime/poller.js';
 import type { VehicleState } from './realtime/vehicles.js';
 import { trainNumber } from './gtfs/networks.js';
 import { distM } from './shape.js';
@@ -10,6 +11,14 @@ import { addDays, localDate, serviceDayBase } from './time.js';
 export function minutesUntil(estimatedMs: number, nowMs: number): number {
   const secs = (estimatedMs - nowMs) / 1000;
   return secs <= 30 ? 0 : Math.max(1, Math.round(secs / 60));
+}
+
+/** Lo que se sabe en tiempo real: los feeds de la última lectura y el último dato de cada tren. */
+export interface RealtimeView {
+  trips: Map<string, TripRealtime>;
+  vehicles?: Map<string, VehicleState>;
+  /** Último dato de cada tren, para cuando deja de salir en los feeds. */
+  memory?: Map<string, Remembered>;
 }
 
 export interface ArrivalsOptions {
@@ -26,7 +35,7 @@ export interface ArrivalsOptions {
  */
 export function getArrivals(
   data: GtfsData,
-  realtime: Pick<RealtimeState, 'trips'> & { vehicles?: Map<string, VehicleState> },
+  realtime: RealtimeView,
   stopId: string,
   nowMs: number,
   { windowMin = 90, limit = 12, graceSec = 30 }: ArrivalsOptions = {},
@@ -51,20 +60,59 @@ export function getArrivals(
       const trip = data.trips.get(st.tripId);
       if (!trip || !services.has(trip.serviceId)) continue;
 
-      const rtTrip = realtime.trips.get(st.tripId);
+      // Posición real y último dato guardado: solo de la circulación de hoy (no la de ayer/mañana
+      // con el mismo trip_id), que es la que puede estar en los feeds.
+      const current = Math.abs(scheduled - nowMs) < 4 * 3600_000;
+      const liveRt = realtime.trips.get(st.tripId);
+      const liveVehicle = current ? realtime.vehicles?.get(st.tripId) : undefined;
+      const mem = current ? realtime.memory?.get(st.tripId) : undefined;
+      const rtTrip = liveRt ?? mem?.rt;
+      const vehicle = liveVehicle ?? mem?.vehicle;
+      // Antigüedad del dato que se usa (0 si viene en la última lectura).
+      const rtAge = liveRt ? 0 : mem?.rt && mem.rtAt != null ? nowMs - mem.rtAt : null;
+      const vehicleAge = liveVehicle ? 0 : mem?.vehicle && mem.vehicleAt != null ? nowMs - mem.vehicleAt : null;
+      // El tren ha dejado de salir en el feed de retrasos: el retraso es el último que dio Renfe.
+      const rtLost = rtAge != null && rtAge > BLIP_MS;
+      const vehicleLost = vehicleAge != null && vehicleAge > BLIP_MS;
+
       const rtStop = rtTrip?.stops.get(stopId);
       const delaySec = rtTrip ? realtimeDelaySec(data, st.tripId, stopId, base, rtTrip) : null;
       const estimated = delaySec != null ? scheduled + delaySec * 1000 : scheduled;
 
-      // Posición real del tren. Solo se mira para la circulación de hoy (no la de ayer/mañana
-      // con el mismo trip_id), que es la que puede estar en el feed.
-      const vehicle = Math.abs(scheduled - nowMs) < 4 * 3600_000 ? realtime.vehicles?.get(st.tripId) : undefined;
-      const pos = vehicle ? vehiclePosition(data, st.tripId, stopId, st.seq, vehicle) : null;
+      let pos = vehicle ? vehiclePosition(data, st.tripId, stopId, st.seq, vehicle) : null;
       // Ya está más allá de nuestra parada: ha pasado aunque la estimación diga otra cosa.
+      // Vale también con la última posición conocida: un tren no va hacia atrás.
       if (pos === 'passed') continue;
-      // Un tren que ya ha pasado tiene hora estimada en el pasado y se descarta aquí,
-      // salvo que siga entrando o parado en la estación.
-      if (!pos && (estimated < fromMs || estimated > toMs)) continue;
+      if (pos && vehicleLost) {
+        // Se perdió en nuestra parada: si es la última, ya ha terminado; si no, no se sabe si
+        // sigue ahí, así que no se afirma "En andén" ni "Entrando".
+        if (trip.lastStopId === stopId) continue;
+        pos = null;
+      }
+
+      let unconfirmed: boolean;
+      if (rtLost) {
+        // Si ya iba en marcha y hace poco que se perdió (o se sigue viendo en el mapa), sale
+        // "sin señal" con su último retraso. Si no, "Sin confirmar", pero con ese retraso.
+        const lastSeen = nowMs - rtAge;
+        const moved = hasMoved(data, st.tripId, base, vehicle, delaySec, lastSeen);
+        unconfirmed = !(moved && (rtAge <= SIGNAL_LOST_MS || (vehicleAge != null && vehicleAge <= BLIP_MS)));
+      } else {
+        const heard = rtTrip != null || (vehicleAge != null && !vehicleLost);
+        unconfirmed = !heard && departsFromOriginBy(data, st.tripId, base) <= nowMs + UNCONFIRMED_AHEAD_MS;
+      }
+
+      // Un tren que ya ha pasado tiene hora estimada en el pasado y se descarta aquí, salvo
+      // que siga entrando o parado en la estación. Si se perdió, el retraso suele haber ido
+      // a más: se le da un margen antes de quitarlo.
+      // Pero solo si aún no había pasado cuando se perdió: si no, reaparecería un tren que ya
+      // se fue. En la última parada tampoco: al terminar el recorrido sale del feed, y es lo
+      // normal (caso real: perdido a una parada del final, seguía "llegando" al destino).
+      const from =
+        rtLost && trip.lastStopId !== stopId
+          ? Math.max(fromMs - LOST_GRACE_MS, nowMs - rtAge - graceSec * 1000)
+          : fromMs;
+      if (!pos && (estimated < from || estimated > toMs)) continue;
       if (pos && estimated > toMs) continue;
 
       const line = data.lines.get(trip.routeId) ?? { name: '?', color: '7A7A7A', textColor: 'FFFFFF' };
@@ -77,8 +125,9 @@ export function getArrivals(
         estimated,
         minutes: minutesUntil(estimated, nowMs),
         delaySec,
-        realtime: rtTrip != null,
-        unconfirmed: !rtTrip && !vehicle && departsFromOriginBy(data, st.tripId, base) <= nowMs + UNCONFIRMED_AHEAD_MS,
+        realtime: rtTrip != null && !rtLost,
+        unconfirmed,
+        ...(rtLost ? { lastSeenAt: nowMs - rtAge } : {}),
         cancelled: !!rtTrip?.cancelled || !!rtStop?.skipped,
         terminates: trip.lastStopId === stopId,
         hasPosition: vehicle?.lat != null && vehicle.lon != null,
@@ -99,6 +148,36 @@ export function getArrivals(
  * cuarto aparece en unos minutos, el resto no: retraso en publicar o cancelación sin avisar.)
  */
 const UNCONFIRMED_AHEAD_MS = 5 * 60_000;
+
+/**
+ * Un tren que se ha perdido se mantiene este tiempo tras su hora estimada si no consta que
+ * haya pasado: durante el corte el retraso casi siempre sube (p90 +7 min, medido 2026-11-17).
+ */
+const LOST_GRACE_MS = 10 * 60_000;
+
+/**
+ * ¿Había salido ya de su origen cuando se perdió? Con posición, si estaba más allá de la
+ * primera parada; sin ella, si según el horario y su retraso debía haber salido ya.
+ */
+function hasMoved(
+  data: GtfsData,
+  tripId: string,
+  base: number,
+  v: VehicleState | undefined,
+  delaySec: number | null,
+  lastSeen: number,
+): boolean {
+  const stops = data.tripStops.get(tripId) ?? [];
+  const i = v ? stops.indexOf(v.stopId) : -1;
+  if (i > 0) return true;
+  if (v && i === 0) {
+    // "En tránsito" con la de origen: Renfe da la parada que acaba de dejar.
+    if (v.status !== 'in_transit') return false;
+    const s = data.stops.get(stops[0]);
+    return !s || v.lat == null || v.lon == null || distM(s.lat, s.lon, v.lat, v.lon) > PASSED_M;
+  }
+  return departsFromOriginBy(data, tripId, base) + Math.max(0, delaySec ?? 0) * 1000 <= lastSeen;
+}
 
 /** Hora programada de salida del viaje desde su primera parada (epoch ms). */
 function departsFromOriginBy(data: GtfsData, tripId: string, base: number): number {

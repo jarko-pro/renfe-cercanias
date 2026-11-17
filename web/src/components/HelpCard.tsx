@@ -48,6 +48,11 @@ export function HelpCard() {
         <dd>Renfe no da datos en directo de este tren todavía: es la hora del horario.</dd>
 
         <dt>
+          <span className="badge lost">+7 min · sin señal</span>
+        </dt>
+        <dd>Renfe ha dejado de dar datos de un tren en marcha: es el último retraso que dio. En el mapa, su última posición en gris.</dd>
+
+        <dt>
           <span className="badge unconfirmed">Sin confirmar</span>
         </dt>
         <dd>Ya debería estar circulando, pero Renfe no da señal. Puede ir con retraso o estar cancelado.</dd>

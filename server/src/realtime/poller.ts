@@ -58,7 +58,11 @@ export function parseTripUpdates(buf: Uint8Array): Omit<RealtimeState, 'fetchedA
   return { feedTimestamp: (num(feed.header.timestamp as LongLike) ?? 0) * 1000 || null, trips };
 }
 
-export function createRealtimePoller(intervalMs: number, log: (msg: string) => void) {
+export function createRealtimePoller(
+  intervalMs: number,
+  log: (msg: string) => void,
+  onUpdate?: (trips: Map<string, TripRealtime>, fetchedAt: number) => void,
+) {
   const state: RealtimeState = { fetchedAt: null, feedTimestamp: null, trips: new Map() };
 
   async function tick() {
@@ -69,6 +73,7 @@ export function createRealtimePoller(intervalMs: number, log: (msg: string) => v
       state.trips = parsed.trips;
       state.feedTimestamp = parsed.feedTimestamp;
       state.fetchedAt = Date.now();
+      onUpdate?.(state.trips, state.fetchedAt);
     } catch (err) {
       log(`Error leyendo tiempo real: ${(err as Error).message}`);
     }

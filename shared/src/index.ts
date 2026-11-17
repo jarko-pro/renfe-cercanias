@@ -40,6 +40,12 @@ export interface Arrival {
    * sale en unos minutos). Puede ir con retraso o estar cancelado: la hora no es fiable.
    */
   unconfirmed: boolean;
+  /**
+   * Renfe ha dejado de dar datos de este tren: hora del último (epoch ms). `delaySec` y
+   * `estimated` son los de entonces. Con `unconfirmed` a false iba en marcha y se perdió hace
+   * poco ("sin señal"); a true, se perdió hace rato o antes de salir de su origen.
+   */
+  lastSeenAt?: number;
   cancelled: boolean;
   /** El tren termina su recorrido en esta parada. */
   terminates: boolean;
@@ -71,6 +77,8 @@ export interface TripLive {
   delaySec: number | null;
   /** Hora de la posición (epoch ms). */
   updatedAt: number | null;
+  /** Renfe ha dejado de dar la posición: es la última conocida, recibida a esta hora (epoch ms). */
+  lastSeenAt?: number;
 }
 
 /** Aviso de Renfe que afecta a una estación o a alguna de sus líneas. */

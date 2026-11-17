@@ -7,8 +7,9 @@ import { alertsForStop } from './alerts.js';
 import { getArrivals } from './arrivals.js';
 import { downloadGtfs, loadGtfs } from './gtfs/loader.js';
 import type { GtfsData } from './gtfs/types.js';
-import { buildTripLive } from './live.js';
+import { tripLiveNow } from './live.js';
 import { createAlertsPoller } from './realtime/alerts.js';
+import { createRealtimeMemory } from './realtime/memory.js';
 import { createRealtimePoller } from './realtime/poller.js';
 import { createVehiclePoller } from './realtime/vehicles.js';
 import { tripPath } from './shape.js';
@@ -66,9 +67,21 @@ async function refreshGtfs() {
   }
 }
 
-const realtime = createRealtimePoller(RT_INTERVAL_MS, (m) => app.log.warn(m));
+// Último dato de cada tren: si deja de salir en el feed, no se pierden su retraso ni su posición.
+const memory = createRealtimeMemory();
+const realtime = createRealtimePoller(
+  RT_INTERVAL_MS,
+  (m) => app.log.warn(m),
+  (trips, at) => memory.onTrips(trips, at),
+);
 // Una sola descarga cada 30 s para todos los usuarios: seguir un tren solo lee de memoria.
-const positions = createVehiclePoller(VP_INTERVAL_MS, (m) => app.log.warn(m));
+const positions = createVehiclePoller(
+  VP_INTERVAL_MS,
+  (m) => app.log.warn(m),
+  (vehicles, at) => memory.onVehicles(vehicles, at),
+);
+/** Lo que se sabe en tiempo real, con el último dato de los trenes que han dejado de salir. */
+const rtView = () => ({ trips: realtime.state.trips, vehicles: positions.state.vehicles, memory: memory.trips });
 // Los avisos cambian poco: cada 2 min basta.
 const alerts = createAlertsPoller(2 * 60_000, (m) => app.log.warn(m));
 // Histórico de retrasos (Postgres en DATABASE_URL). Cada 10 s mira si hay una lectura nueva del feed.
@@ -127,7 +140,7 @@ app.get<{ Params: { id: string } }>('/api/stops/:id/arrivals', async (req, reply
     // Se devuelven todos los de la ventana: la app separa salidas/llegadas y filtra por línea.
     arrivals: getArrivals(
       gtfs,
-      { trips: realtime.state.trips, vehicles: positions.state.vehicles },
+      rtView(),
       stop.id,
       now,
       { limit: 60 },
@@ -154,7 +167,7 @@ app.get<{ Params: { id: string }; Querystring: { day?: string } }>('/api/stops/:
 app.get<{ Params: { tripId: string } }>('/api/trips/:tripId/live', async (req, reply) => {
   if (!gtfs) return reply.code(503).send({ error: 'Cargando datos de Renfe, prueba en unos segundos' });
   const { tripId } = req.params;
-  const res = buildTripLive(gtfs, tripId, positions.state.vehicles.get(tripId), realtime.state.trips.get(tripId));
+  const res = tripLiveNow(gtfs, tripId, rtView(), Date.now());
   if (!res) return reply.code(404).send({ error: 'Tren no encontrado' });
   reply.header('Cache-Control', 'no-store');
   return res;
@@ -189,7 +202,7 @@ app.get<{ Params: { number: string } }>('/api/trains/:number', async (req, reply
   if (!/^\d{5}$/.test(number)) return reply.code(400).send({ error: 'El número de tren tiene 5 cifras' });
   const res: TrainMatch[] = findTrains(
     gtfs,
-    { trips: realtime.state.trips, vehicles: positions.state.vehicles },
+    rtView(),
     number,
     Date.now(),
   );

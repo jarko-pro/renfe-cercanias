@@ -24,6 +24,7 @@ Cada estación tiene su propia dirección (por ejemplo [/estacion/sol/](https://
 | --- | --- |
 | **En hora** / **+3 min** | Dato en tiempo real de Renfe: el tren va en hora o con ese retraso. El color va de verde (en hora) a amarillo (3-5 min), naranja (6-10) y rojo (más de 10). |
 | **Programado** | Renfe aún no da datos en directo de ese tren: es la hora del horario. |
+| **+7 min · sin señal** | Renfe ha dejado de dar datos de un tren en marcha: es el último retraso que dio. En el mapa sale su última posición, en gris. |
 | **Sin confirmar** | Ya debería estar circulando, pero Renfe no da señal. Puede ir con retraso o estar cancelado. |
 | 📍 | Se puede seguir el tren en el mapa. |
 | **Vía 3** | Vía por la que entra el tren, cuando Renfe la da. |

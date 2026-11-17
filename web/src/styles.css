@@ -499,6 +499,11 @@ body {
   background: var(--danger-bg);
   color: var(--danger);
 }
+/* Último retraso de un tren que ha dejado de dar señal: gris, el dato ya no es en directo. */
+.badge.lost {
+  background: var(--surface-2);
+  color: var(--text-2);
+}
 /* Gris como "Programado", con borde discontinuo: no hay dato, no es un retraso. */
 .badge.unconfirmed {
   background: transparent;

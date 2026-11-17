@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { GtfsData } from '../src/gtfs/types.js';
-import { buildTripLive, nextStopId } from '../src/live.js';
+import { buildTripLive, nextStopId, tripLiveNow } from '../src/live.js';
 import type { VehicleState } from '../src/realtime/vehicles.js';
 
 const stop = (id: string) => [id, { id, name: `Estación ${id}`, lat: 40, lon: -3, network: '', lines: [] }];
@@ -46,5 +46,20 @@ describe('buildTripLive', () => {
 
   it('viaje desconocido: null', () => {
     expect(buildTripLive(data, 'NO', undefined, undefined)).toBeNull();
+  });
+});
+
+describe('tripLiveNow', () => {
+  it('si deja de salir en el feed, da la última posición con su hora', () => {
+    const memory = new Map([['T', { vehicle: veh('B', 'in_transit'), vehicleAt: 1000 }]]);
+    const live = tripLiveNow(data, 'T', { trips: new Map(), vehicles: new Map(), memory }, 1000 + 5 * 60_000)!;
+    expect(live.position).toEqual({ lat: 40, lon: -3 });
+    expect(live.nextStopName).toBe('Estación C');
+    expect(live.lastSeenAt).toBe(1000);
+  });
+
+  it('con la posición en el feed no hay lastSeenAt', () => {
+    const live = tripLiveNow(data, 'T', { trips: new Map(), vehicles: new Map([['T', veh('B', 'stopped')]]) }, 5000)!;
+    expect(live.lastSeenAt).toBeUndefined();
   });
 });

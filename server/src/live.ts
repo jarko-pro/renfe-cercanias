@@ -1,5 +1,7 @@
 import type { TripLive } from '@renfe/shared';
+import type { RealtimeView } from './arrivals.js';
 import type { GtfsData } from './gtfs/types.js';
+import { BLIP_MS } from './realtime/memory.js';
 import type { TripRealtime } from './realtime/poller.js';
 import type { VehicleState } from './realtime/vehicles.js';
 
@@ -23,6 +25,7 @@ export function buildTripLive(
   tripId: string,
   v: VehicleState | undefined,
   rtTrip: TripRealtime | undefined,
+  lastSeenAt?: number,
 ): TripLive | null {
   const trip = data.trips.get(tripId);
   if (!trip) return null;
@@ -40,5 +43,19 @@ export function buildTripLive(
     ...(v?.platform ? { platform: v.platform } : {}),
     delaySec: rtTrip?.delaySec ?? null,
     updatedAt: v?.timestamp ?? null,
+    ...(lastSeenAt != null ? { lastSeenAt } : {}),
   };
+}
+
+/**
+ * Igual, a partir de lo que se sabe en tiempo real: si el tren ha dejado de salir en los
+ * feeds, con su última posición y su último retraso.
+ */
+export function tripLiveNow(data: GtfsData, tripId: string, realtime: RealtimeView, nowMs: number): TripLive | null {
+  const mem = realtime.memory?.get(tripId);
+  const liveV = realtime.vehicles?.get(tripId);
+  const v = liveV ?? mem?.vehicle;
+  const rt = realtime.trips.get(tripId) ?? mem?.rt;
+  const lost = !liveV && mem?.vehicle && mem.vehicleAt != null && nowMs - mem.vehicleAt > BLIP_MS;
+  return buildTripLive(data, tripId, v, rt, lost ? mem.vehicleAt : undefined);
 }

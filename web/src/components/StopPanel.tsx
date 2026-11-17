@@ -99,6 +99,12 @@ function AlertList({ alerts }: { alerts: StopAlert[] }) {
 /** Dónde está el tren seguido, en pocas palabras. */
 function whereText(live: TripLive | null | undefined): string {
   if (!live) return 'Localizando el tren…';
+  // Renfe ha dejado de dar su posición: la última conocida, con su hora.
+  if (live.lastSeenAt != null && live.position) return `Visto a las ${formatTime(live.lastSeenAt)}: ${placeText(live)}`;
+  return placeText(live);
+}
+
+function placeText(live: TripLive): string {
   // Renfe no publica algunos trenes (p. ej. antes de salir de origen): no se inventa el motivo.
   if (!live.position) return 'Sin posición en directo';
   if (!live.stopName) return 'En camino';
@@ -122,6 +128,10 @@ function ArrivalRow({ a, now, live, onTrack, compact = false }: RowProps) {
   const delayMin = a.delaySec != null ? Math.round(a.delaySec / 60) : 0;
   const minutes = minutesUntil(a.estimated, now);
   const following = live !== undefined;
+  // Renfe ha dejado de publicarlo: se muestra con su último retraso, sin afirmar nada más.
+  const lost = a.lastSeenAt != null;
+  const signalLost = lost && !a.unconfirmed;
+  const unsure = a.unconfirmed || lost;
   // En cabeceras el tren espera en el andén varios minutos: ahí manda la cuenta atrás.
   const atPlatform = a.vehicleStatus === 'at_platform';
   const eta = a.cancelled
@@ -132,7 +142,7 @@ function ArrivalRow({ a, now, live, onTrack, compact = false }: RowProps) {
         ? 'Entrando'
         : minutes === 0
           ? // Sin datos de Renfe no se puede afirmar que el tren esté llegando.
-            a.unconfirmed
+            unsure
             ? '—'
             : 'Ahora'
           : null;
@@ -183,10 +193,21 @@ function ArrivalRow({ a, now, live, onTrack, compact = false }: RowProps) {
                 <span className="dot" />
                 {delayMin > 0 ? `+${delayMin} min` : 'En hora'}
               </span>
+            ) : signalLost ? (
+              <span
+                className="badge lost"
+                title={`Renfe no da datos de este tren desde las ${formatTime(a.lastSeenAt!)}: es el último retraso que dio`}
+              >
+                {delayMin > 0 ? `+${delayMin} min` : 'En hora'} · sin señal
+              </span>
             ) : a.unconfirmed ? (
               <span
                 className="badge unconfirmed"
-                title="Renfe no da datos en tiempo real de este tren: puede ir con retraso o estar cancelado"
+                title={
+                  lost
+                    ? `Renfe no da datos de este tren desde las ${formatTime(a.lastSeenAt!)}: puede ir con más retraso o estar cancelado`
+                    : 'Renfe no da datos en tiempo real de este tren: puede ir con retraso o estar cancelado'
+                }
               >
                 Sin confirmar
               </span>
@@ -212,7 +233,7 @@ function ArrivalRow({ a, now, live, onTrack, compact = false }: RowProps) {
             {!compact && pin}
           </span>
         </span>
-        <span className={`eta${a.unconfirmed ? ' unsure' : ''}`}>
+        <span className={`eta${unsure ? ' unsure' : ''}`}>
           {eta != null ? (
             <span className={eta === '—' ? undefined : 'now'}>{eta}</span>
           ) : (
