@@ -55,6 +55,11 @@ export interface Arrival {
   platform?: string;
   /** Renfe está publicando la posición de este tren: se puede seguir en el mapa. */
   hasPosition: boolean;
+  /**
+   * Cómo suele llegar este tren (mismo número) a esta estación, según el histórico. Solo con
+   * al menos 5 días de datos. Puntual = menos de 3 min de retraso.
+   */
+  punctuality?: { days: number; punctualDays: number; medianDelaySec: number };
 }
 
 /** Dónde está ahora un tren concreto (para seguirlo en el mapa). */

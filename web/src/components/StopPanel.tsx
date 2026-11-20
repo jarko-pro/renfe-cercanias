@@ -114,6 +114,17 @@ function placeText(live: TripLive): string {
   return live.nextStopName ? `Entre ${live.stopName} y ${live.nextStopName}` : `Saliendo de ${live.stopName}`;
 }
 
+/** Cómo suele llegar el tren seguido a esta estación (histórico): "Puntual aquí 7 de 9 días". */
+function PunctualityLine({ p }: { p: NonNullable<Arrival['punctuality']> }) {
+  const typical = Math.round(p.medianDelaySec / 60);
+  return (
+    <p className="punctuality" title="Días que este tren llegó a esta estación con menos de 3 min de retraso">
+      Puntual aquí {p.punctualDays} de {p.days} días
+      {typical >= 3 && <> · suele ir +{typical} min</>}
+    </p>
+  );
+}
+
 interface RowProps {
   a: Arrival;
   now: number;
@@ -469,6 +480,7 @@ export function StopPanel({ stop, isFavorite, onToggleFavorite, onClose, tracked
               <ul className="arrivals">
                 <ArrivalRow a={trackedArrival} now={now} live={tracked?.live ?? null} onTrack={onTrack} compact />
               </ul>
+              {trackedArrival.punctuality && <PunctualityLine p={trackedArrival.punctuality} />}
               <button className="show-all" onClick={() => onTrack(null)}>
                 <span aria-hidden="true">˄</span> Ver todos los trenes
               </button>

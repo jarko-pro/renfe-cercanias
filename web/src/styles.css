@@ -686,6 +686,13 @@ body {
     display: none;
   }
 }
+/* Histórico del tren seguido, bajo su fila en la tarjeta compacta. */
+.punctuality {
+  margin: 0;
+  padding: 0 16px 10px;
+  font-size: 12px;
+  color: var(--text-2);
+}
 .show-all {
   display: block;
   width: 100%;

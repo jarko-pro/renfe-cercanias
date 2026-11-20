@@ -15,6 +15,7 @@ import { createVehiclePoller } from './realtime/vehicles.js';
 import { tripPath } from './shape.js';
 import { findTrains } from './trains.js';
 import { getStopTimetable, getTripTimes } from './timetable.js';
+import { withPunctuality } from './punctuality.js';
 import { registerStats } from './stats.js';
 import { createHistory } from './history/index.js';
 import { dayType, lineAnomalies } from './history/insights.js';
@@ -138,12 +139,12 @@ app.get<{ Params: { id: string } }>('/api/stops/:id/arrivals', async (req, reply
     generatedAt: now,
     realtimeAgeSec: realtime.state.fetchedAt ? Math.round((now - realtime.state.fetchedAt) / 1000) : null,
     // Se devuelven todos los de la ventana: la app separa salidas/llegadas y filtra por línea.
-    arrivals: getArrivals(
+    arrivals: withPunctuality(
+      getArrivals(gtfs, rtView(), stop.id, now, { limit: 60 }),
       gtfs,
-      rtView(),
+      history.insights(),
       stop.id,
       now,
-      { limit: 60 },
     ),
     alerts: alertsForStop(gtfs, alerts.state.alerts, stop.id),
   };
