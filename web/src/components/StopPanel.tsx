@@ -114,14 +114,20 @@ function placeText(live: TripLive): string {
   return live.nextStopName ? `Entre ${live.stopName} y ${live.nextStopName}` : `Saliendo de ${live.stopName}`;
 }
 
-/** Cómo suele llegar el tren seguido a esta estación (histórico): "Puntual aquí 7 de 9 días". */
+/**
+ * Cómo suele llegar el tren seguido a esta estación (histórico): "Suele ir 5 min tarde", con
+ * un punto del color de la escala de retraso. Va dentro del botón de la fila: solo spans.
+ */
 function PunctualityLine({ p }: { p: NonNullable<Arrival['punctuality']> }) {
-  const typical = Math.round(p.medianDelaySec / 60);
+  const typical = Math.max(0, Math.round(p.medianDelaySec / 60));
   return (
-    <p className="punctuality" title="Días que este tren llegó a esta estación con menos de 3 min de retraso">
-      Puntual aquí {p.punctualDays} de {p.days} días
-      {typical >= 3 && <> · suele ir +{typical} min</>}
-    </p>
+    <span
+      className="punctuality"
+      title={`Según los últimos ${p.days} días: llegó aquí puntual (menos de 3 min tarde) ${p.punctualDays} de ${p.days}`}
+    >
+      <span className={`pdot ${delayClass(typical)}`} aria-hidden="true" />
+      {typical > 0 ? `Suele ir ${typical} min tarde` : 'Suele ir en hora'}
+    </span>
   );
 }
 
@@ -243,6 +249,7 @@ function ArrivalRow({ a, now, live, onTrack, compact = false }: RowProps) {
             {platformText && !a.cancelled && <span className="badge platform">{platformText}</span>}
             {!compact && pin}
           </span>
+          {following && a.punctuality && <PunctualityLine p={a.punctuality} />}
         </span>
         <span className={`eta${unsure ? ' unsure' : ''}`}>
           {eta != null ? (
@@ -480,7 +487,6 @@ export function StopPanel({ stop, isFavorite, onToggleFavorite, onClose, tracked
               <ul className="arrivals">
                 <ArrivalRow a={trackedArrival} now={now} live={tracked?.live ?? null} onTrack={onTrack} compact />
               </ul>
-              {trackedArrival.punctuality && <PunctualityLine p={trackedArrival.punctuality} />}
               <button className="show-all" onClick={() => onTrack(null)}>
                 <span aria-hidden="true">˄</span> Ver todos los trenes
               </button>

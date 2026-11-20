@@ -686,12 +686,33 @@ body {
     display: none;
   }
 }
-/* Histórico del tren seguido, bajo su fila en la tarjeta compacta. */
+/* Histórico del tren seguido, bajo su fila: punto con la escala de retraso y texto en gris. */
 .punctuality {
-  margin: 0;
-  padding: 0 16px 10px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 3px;
   font-size: 12px;
   color: var(--text-2);
+}
+.pdot {
+  flex: none;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--live);
+}
+.pdot.d1 {
+  background: var(--d1);
+}
+.pdot.d2 {
+  background: var(--d2);
+}
+.pdot.d3 {
+  background: var(--d3);
+}
+.pdot.d4 {
+  background: var(--danger);
 }
 .show-all {
   display: block;
