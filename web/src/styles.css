@@ -311,6 +311,15 @@ body {
 .icon-btn.star.on {
   color: #e8a600;
 }
+.icon-btn.cal {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.icon-btn.cal.on {
+  background: var(--surface-2);
+  color: var(--text);
+}
 
 /* Filtro por línea + pestañas */
 .panel-controls:not(:empty) {
@@ -1030,6 +1039,11 @@ button.arrival.following.dx {
 }
 .help-star {
   color: #e8a600;
+}
+.help-cal {
+  display: inline-flex;
+  vertical-align: -4px;
+  color: var(--text-2);
 }
 .help-legend {
   display: grid;

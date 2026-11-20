@@ -3,6 +3,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { track } from '../lib/analytics';
 import { ApiError, fetchArrivals, isAbort } from '../lib/api';
 import { delayClass, formatTime } from '../lib/text';
+import { CALENDAR } from './icons';
 import { LineChip } from './LineChip';
 import { Timetable } from './Timetable';
 
@@ -416,6 +417,16 @@ export function StopPanel({ stop, isFavorite, onToggleFavorite, onClose, tracked
             )}
           </div>
         </div>
+        {/* Atajo al horario del día (el enlace del final de la lista sigue estando). */}
+        <button
+          className={`icon-btn cal${timetable ? ' on' : ''}`}
+          onClick={() => (timetable ? setView('live') : openTimetable())}
+          aria-pressed={timetable}
+          title={timetable ? 'Volver a los próximos trenes' : 'Horario de todo el día'}
+          aria-label={timetable ? 'Volver a los próximos trenes' : 'Horario de todo el día'}
+        >
+          {CALENDAR}
+        </button>
         <button
           className={`icon-btn star${isFavorite ? ' on' : ''}`}
           onClick={onToggleFavorite}

@@ -1,3 +1,5 @@
+import { CALENDAR } from './icons';
+
 /** Mismo icono que en las filas del panel: el tren se puede seguir en el mapa. */
 const PIN = (
   <svg className="live-pin" viewBox="0 0 24 24" width="15" height="15" aria-hidden="true">
@@ -21,6 +23,10 @@ export function HelpCard() {
         <li>También puedes buscar un tren por su número (5 cifras).</li>
         <li>
           Pulsa <span className="help-star">★</span> en una estación para tenerla a mano la próxima vez.
+        </li>
+        <li>
+          Pulsa <span className="help-cal">{CALENDAR}</span> para ver el horario de todo el día. En los trenes que ya
+          han pasado, el color dice con cuánto retraso pasaron.
         </li>
       </ul>
 
@@ -55,7 +61,18 @@ export function HelpCard() {
         <dt>
           <span className="badge unconfirmed">Sin confirmar</span>
         </dt>
-        <dd>Ya debería estar circulando, pero Renfe no da señal. Puede ir con retraso o estar cancelado.</dd>
+        <dd>
+          Ya debería estar circulando, pero Renfe no da señal (o dejó de darla antes de que saliera de su origen). Puede ir
+          con retraso, no llegar a salir o estar cancelado.
+        </dd>
+
+        <dt>
+          <span className="punctuality">
+            <span className="pdot d3" aria-hidden="true" />
+            Suele ir 8 min tarde
+          </span>
+        </dt>
+        <dd>Al seguir un tren: cómo suele llegar a esa estación, según los últimos días. El color, como el del retraso.</dd>
 
         <dt>{PIN}</dt>
         <dd>Toca el tren para seguirlo en el mapa.</dd>
