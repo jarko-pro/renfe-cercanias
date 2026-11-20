@@ -704,6 +704,17 @@ body {
   font-size: 12px;
   color: var(--text-2);
 }
+/* En la lista, al final de la segunda línea, junto a los minutos. */
+.ptag {
+  display: inline-flex;
+  align-items: center;
+  flex: none;
+  gap: 5px;
+  margin-left: auto;
+  font-size: 12px;
+  white-space: nowrap;
+  color: var(--text-2);
+}
 .pdot {
   flex: none;
   width: 8px;

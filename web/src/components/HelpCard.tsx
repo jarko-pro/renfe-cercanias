@@ -74,6 +74,17 @@ export function HelpCard() {
         </dt>
         <dd>Al seguir un tren: cómo suele llegar a esa estación, según los últimos días. El color, como el del retraso.</dd>
 
+        <dt>
+          <span className="ptag">
+            <span className="pdot d1" aria-hidden="true" />
+            80 % puntual
+          </span>
+        </dt>
+        <dd>
+          En la lista: de los últimos días, en cuántos llegó ese tren a esta estación con menos de 3 min de retraso. Si no
+          cabe, solo el porcentaje. El color es el de su retraso habitual.
+        </dd>
+
         <dt>{PIN}</dt>
         <dd>Toca el tren para seguirlo en el mapa.</dd>
 

@@ -1,5 +1,5 @@
 import type { Arrival, ArrivalsResponse, Stop, StopAlert, TripLive } from '@renfe/shared';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import { track } from '../lib/analytics';
 import { ApiError, fetchArrivals, isAbort } from '../lib/api';
 import { delayClass, formatTime } from '../lib/text';
@@ -124,11 +124,40 @@ function PunctualityLine({ p }: { p: NonNullable<Arrival['punctuality']> }) {
   return (
     <span
       className="punctuality"
-      title={`Según los últimos ${p.days} días: llegó aquí puntual (menos de 3 min tarde) ${p.punctualDays} de ${p.days}`}
+      title={punctualityTitle(p)}
     >
       <span className={`pdot ${delayClass(typical)}`} aria-hidden="true" />
       {typical > 0 ? `Suele ir ${typical} min tarde` : 'Suele ir en hora'}
     </span>
+  );
+}
+
+/** Texto al pasar el ratón con el detalle del histórico. */
+const punctualityTitle = (p: NonNullable<Arrival['punctuality']>) =>
+  `Según los últimos ${p.days} días: llegó aquí puntual (menos de 3 min tarde) ${p.punctualDays} de ${p.days}`;
+
+/**
+ * En la lista: "● 80 % puntual", o "● 80 %" si no cabe. El punto, con la escala de color del
+ * retraso habitual (como "Suele ir N min tarde").
+ */
+function PunctualityTag({ p, short }: { p: NonNullable<Arrival['punctuality']>; short: boolean }) {
+  const typical = Math.max(0, Math.round(p.medianDelaySec / 60));
+  return (
+    <span className="ptag" title={punctualityTitle(p)}>
+      <span className={`pdot ${delayClass(typical)}`} aria-hidden="true" />
+      {Math.round((100 * p.punctualDays) / p.days)} %{!short && ' puntual'}
+    </span>
+  );
+}
+
+/** Ancho de la ventana, para volver a medir las filas al girar el móvil o cambiar el tamaño. */
+function useWindowWidth(): number {
+  return useSyncExternalStore(
+    (cb) => {
+      window.addEventListener('resize', cb);
+      return () => window.removeEventListener('resize', cb);
+    },
+    () => window.innerWidth,
   );
 }
 
@@ -169,6 +198,19 @@ function ArrivalRow({ a, now, live, onTrack, compact = false }: RowProps) {
     : atPlatform && eta == null
       ? 'En andén'
       : null;
+  // Puntualidad en la lista (al seguirlo va debajo, más completa). Con la palabra "puntual" si
+  // cabe: se mide la línea antes de pintarla y, si se corta, se quita la palabra.
+  const showTag = !following && !a.cancelled && a.punctuality != null;
+  const subRef = useRef<HTMLSpanElement>(null);
+  const width = useWindowWidth();
+  const layoutKey = `${width}|${a.estimated}|${a.scheduled}|${a.platform}|${a.realtime}|${a.lastSeenAt}|${a.unconfirmed}`;
+  const [measured, setMeasured] = useState({ key: '', short: false });
+  useLayoutEffect(() => {
+    if (!showTag) return;
+    if (measured.key !== layoutKey) return setMeasured({ key: layoutKey, short: false });
+    const el = subRef.current;
+    if (!measured.short && el && el.scrollWidth > el.clientWidth + 1) setMeasured({ key: layoutKey, short: true });
+  }, [showTag, layoutKey, measured]);
   const pin = (a.hasPosition || following) && !a.cancelled && (
     <svg className="live-pin" viewBox="0 0 24 24" width="15" height="15" aria-label="Se puede ver en directo">
       <path
@@ -203,7 +245,7 @@ function ArrivalRow({ a, now, live, onTrack, compact = false }: RowProps) {
               </span>
             )}
           </span>
-          <span className="arrival-sub">
+          <span className="arrival-sub" ref={subRef}>
             {a.cancelled ? (
               <span className="badge danger">Cancelado</span>
             ) : a.realtime ? (
@@ -249,6 +291,7 @@ function ArrivalRow({ a, now, live, onTrack, compact = false }: RowProps) {
             )}
             {platformText && !a.cancelled && <span className="badge platform">{platformText}</span>}
             {!compact && pin}
+            {showTag && <PunctualityTag p={a.punctuality!} short={measured.short} />}
           </span>
           {following && a.punctuality && <PunctualityLine p={a.punctuality} />}
         </span>

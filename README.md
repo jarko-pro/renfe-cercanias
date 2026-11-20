@@ -27,6 +27,7 @@ Cada estación tiene su propia dirección (por ejemplo [/estacion/sol/](https://
 | **+7 min · sin señal** | Renfe ha dejado de dar datos de un tren en marcha: es el último retraso que dio. En el mapa sale su última posición, en gris. |
 | **Sin confirmar** | Ya debería estar circulando, pero Renfe no da señal (o dejó de darla antes de que saliera de su origen). Puede ir con retraso, no llegar a salir o estar cancelado. |
 | ● **Suele ir 8 min tarde** | Al seguir un tren: cómo suele llegar a esa estación, según los últimos días. El color, como el del retraso. |
+| ● **80 % puntual** | En la lista: de los últimos días, en cuántos llegó ese tren a esta estación con menos de 3 min de retraso (si no cabe, solo «80 %»). El color es el de su retraso habitual. |
 | 📅 | Horario de todo el día de la estación. En los trenes que ya han pasado, el color dice con cuánto retraso pasaron. |
 | 📍 | Se puede seguir el tren en el mapa. |
 | **Vía 3** | Vía por la que entra el tren, cuando Renfe la da. |
