@@ -1,4 +1,14 @@
-import type { ArrivalsResponse, Stop, StopTimetable, TrainMatch, TripLive, TripShape, TripTimes } from '@renfe/shared';
+import type {
+  ArrivalsResponse,
+  BusArrivalsResponse,
+  BusStop,
+  Stop,
+  StopTimetable,
+  TrainMatch,
+  TripLive,
+  TripShape,
+  TripTimes,
+} from '@renfe/shared';
 
 /** Vacío en desarrollo (proxy de Vite). En Capacitor/producción: URL pública del backend. */
 const BASE = (import.meta.env.VITE_API_URL ?? '').replace(/\/$/, '');
@@ -69,13 +79,22 @@ export const fetchTripShape = (tripId: string, signal?: AbortSignal) =>
 export const fetchTrains = (number: string, signal?: AbortSignal) =>
   get<TrainMatch[]>(`/api/trains/${encodeURIComponent(number)}`, signal);
 
-// ---- Caché local de estaciones: cambian muy poco, así el mapa sale al instante ----
+/** Paradas de una red de autobús (p. ej. "santander"). */
+export const fetchBusStops = (feed: string, signal?: AbortSignal) =>
+  get<BusStop[]>(`/api/bus/${encodeURIComponent(feed)}/stops`, signal);
+
+/** Próximos buses de una parada (por su número), por línea y destino. */
+export const fetchBusArrivals = (feed: string, code: string, signal?: AbortSignal) =>
+  get<BusArrivalsResponse>(`/api/bus/${encodeURIComponent(feed)}/stops/${encodeURIComponent(code)}/arrivals`, signal);
+
+// ---- Caché local de estaciones y paradas: cambian muy poco, así el mapa sale al instante ----
 
 const STOPS_KEY = 'renfe:stops:v1';
+const BUS_STOPS_KEY = 'renfe:busstops:v1';
 
-export function readCachedStops(): Stop[] | null {
+function readCache<T>(key: string): T[] | null {
   try {
-    const raw = localStorage.getItem(STOPS_KEY);
+    const raw = localStorage.getItem(key);
     const parsed = raw ? JSON.parse(raw) : null;
     return Array.isArray(parsed) && parsed.length ? parsed : null;
   } catch {
@@ -83,10 +102,15 @@ export function readCachedStops(): Stop[] | null {
   }
 }
 
-export function writeCachedStops(stops: Stop[]) {
+function writeCache(key: string, list: unknown[]) {
   try {
-    localStorage.setItem(STOPS_KEY, JSON.stringify(stops));
+    localStorage.setItem(key, JSON.stringify(list));
   } catch {
     /* sin almacenamiento (modo privado o lleno): no pasa nada */
   }
 }
+
+export const readCachedStops = () => readCache<Stop>(STOPS_KEY);
+export const writeCachedStops = (stops: Stop[]) => writeCache(STOPS_KEY, stops);
+export const readCachedBusStops = () => readCache<BusStop>(BUS_STOPS_KEY);
+export const writeCachedBusStops = (stops: BusStop[]) => writeCache(BUS_STOPS_KEY, stops);

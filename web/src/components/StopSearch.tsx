@@ -1,19 +1,58 @@
-import type { Stop, TrainMatch } from '@renfe/shared';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import type { Line, TrainMatch } from '@renfe/shared';
+import { useEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactNode } from 'react';
 import { fetchTrains, isAbort } from '../lib/api';
+import type { TransportMode } from '../lib/mode';
 import { formatTime, normalize } from '../lib/text';
 import { HelpCard } from './HelpCard';
 import { LineChip } from './LineChip';
 import { track } from '../lib/analytics';
 
-interface Props {
-  stops: Stop[];
-  favorites: Stop[];
+/** Lo que el buscador necesita de una estación de tren o una parada de autobús. */
+export interface SearchStop {
+  id: string;
+  name: string;
+  lines: Line[];
+  /** Número de la marquesina (paradas de autobús): se busca también por él. */
+  code?: string;
+}
+
+interface Props<T extends SearchStop> {
+  mode: TransportMode;
+  /** Lo que va a la izquierda de la barra (la píldora Trenes | Buses). */
+  leading?: ReactNode;
+  stops: T[];
+  favorites: T[];
+  /** Texto gris bajo el nombre: el núcleo de Cercanías, o el número y el sentido de la parada. */
+  metaOf: (stop: T) => string;
   isFavorite: (id: string) => boolean;
-  onToggleFavorite: (stop: Stop) => void;
-  onSelect: (stop: Stop) => void;
+  onToggleFavorite: (stop: T) => void;
+  onSelect: (stop: T) => void;
   onSelectTrain: (train: TrainMatch) => void;
 }
+
+/**
+ * Móvil estrecho (360-400 px): con la píldora y la estrella al lado, al buscador le quedan unos
+ * 120 px de texto. En el resto (incluido el escritorio, con la columna de 380 px) caben unos 160.
+ */
+function useNarrow(): boolean {
+  return useSyncExternalStore(
+    (cb) => {
+      window.addEventListener('resize', cb);
+      return () => window.removeEventListener('resize', cb);
+    },
+    () => window.innerWidth <= 400,
+  );
+}
+
+const PLACEHOLDER: Record<TransportMode, [wide: string, narrow: string]> = {
+  tren: ['Estación o nº de tren', 'Buscar estación'],
+  bus: ['Parada, calle o nº', 'Buscar parada'],
+};
+/** Para lectores de pantalla, el texto completo. */
+const LABEL: Record<TransportMode, string> = {
+  tren: 'Buscar estación o número de tren',
+  bus: 'Buscar parada por nombre, calle o número de parada',
+};
 
 /** Los números de tren de Renfe tienen siempre 5 cifras. */
 const TRAIN_RE = /^\d{5}$/;
@@ -21,13 +60,15 @@ const TRAIN_RE = /^\d{5}$/;
 /** Qué lista está desplegada bajo la barra. */
 type Mode = 'closed' | 'search' | 'favorites' | 'help';
 
-function StopRow({
+function StopRow<T extends SearchStop>({
   s,
+  meta,
   active,
   onPick,
   fav,
 }: {
-  s: Stop;
+  s: T;
+  meta: string;
   active: boolean;
   onPick: () => void;
   /** En la lista de favoritas: estrella para quitarla (o volver a ponerla) sin abrir la estación. */
@@ -57,7 +98,7 @@ function StopRow({
       )}
       <div className="result-name">{s.name}</div>
       <div className="result-meta">
-        <span>{s.network}</span>
+        <span>{meta}</span>
         <span className="chips">
           {s.lines.slice(0, 6).map((l) => (
             <LineChip key={l.name} line={l} small />
@@ -95,7 +136,17 @@ function TrainRow({ t, active, onPick }: { t: TrainMatch; active: boolean; onPic
   );
 }
 
-export function StopSearch({ stops, favorites, isFavorite, onToggleFavorite, onSelect, onSelectTrain }: Props) {
+export function StopSearch<T extends SearchStop>({
+  mode: transport,
+  leading,
+  stops,
+  favorites,
+  metaOf,
+  isFavorite,
+  onToggleFavorite,
+  onSelect,
+  onSelectTrain,
+}: Props<T>) {
   const [query, setQuery] = useState('');
   const [mode, setMode] = useState<Mode>('closed');
   const [active, setActive] = useState(0);
@@ -107,18 +158,23 @@ export function StopSearch({ stops, favorites, isFavorite, onToggleFavorite, onS
   const searchResults = useMemo(() => {
     const q = normalize(query.trim());
     if (!q) return [];
-    const starts: Stop[] = [];
-    const contains: Stop[] = [];
+    // Paradas de autobús: un número busca primero el de la marquesina (exacto y luego por delante).
+    const exact: T[] = [];
+    const starts: T[] = [];
+    const contains: T[] = [];
+    const digits = /^\d+$/.test(q);
     for (const { s, n } of indexed) {
-      if (n.startsWith(q)) starts.push(s);
+      if (digits && s.code === q) exact.push(s);
+      else if (n.startsWith(q) || (digits && s.code?.startsWith(q))) starts.push(s);
       else if (n.includes(q)) contains.push(s);
     }
-    return [...starts, ...contains].slice(0, 8);
+    return [...exact, ...starts, ...contains].slice(0, 8);
   }, [query, indexed]);
 
   // Búsqueda por número de tren: solo con las 5 cifras, para no lanzar peticiones a cada tecla.
-  const trainQuery = TRAIN_RE.test(query.trim()) ? query.trim() : null;
-  const digitsOnly = /^\d{1,4}$/.test(query.trim());
+  const trains_ = transport === 'tren';
+  const trainQuery = trains_ && TRAIN_RE.test(query.trim()) ? query.trim() : null;
+  const digitsOnly = trains_ && /^\d{1,4}$/.test(query.trim());
   const [trains, setTrains] = useState<{ q: string; list: TrainMatch[] | null; error?: boolean } | null>(null);
   useEffect(() => {
     if (!trainQuery) return setTrains(null);
@@ -138,7 +194,7 @@ export function StopSearch({ stops, favorites, isFavorite, onToggleFavorite, onS
 
   // Lo que se ve en la lista de favoritas: las que había al abrirla. Una quitada sigue (con ☆)
   // hasta cerrar la lista, para poder deshacerlo tocando otra vez.
-  const [favShown, setFavShown] = useState<Stop[]>([]);
+  const [favShown, setFavShown] = useState<T[]>([]);
   const results = mode === 'favorites' ? favShown : searchResults;
 
   // Cerrar al pulsar fuera.
@@ -151,7 +207,7 @@ export function StopSearch({ stops, favorites, isFavorite, onToggleFavorite, onS
     return () => document.removeEventListener('pointerdown', onDown);
   }, [mode]);
 
-  const pick = (s: Stop) => {
+  const pick = (s: T) => {
     onSelect(s);
     setQuery('');
     setMode('closed');
@@ -176,17 +232,20 @@ export function StopSearch({ stops, favorites, isFavorite, onToggleFavorite, onS
   };
 
   const favOpen = mode === 'favorites';
+  const narrow = useNarrow();
+  const noun = transport === 'bus' ? 'paradas' : 'estaciones';
 
   return (
     <div className="search" ref={rootRef} onKeyDown={onKeyDown}>
       <div className="search-bar">
+        {leading}
         <div className="search-field">
           <input
             ref={inputRef}
             type="search"
-            placeholder="Buscar estación o nº de tren…"
+            placeholder={PLACEHOLDER[transport][narrow ? 1 : 0]}
             value={query}
-            aria-label="Buscar estación o número de tren"
+            aria-label={LABEL[transport]}
             aria-expanded={mode === 'search' && searchResults.length > 0}
             onChange={(e) => {
               setQuery(e.target.value);
@@ -210,9 +269,9 @@ export function StopSearch({ stops, favorites, isFavorite, onToggleFavorite, onS
         </div>
         <button
           className={`fav-toggle${favOpen ? ' on' : ''}`}
-          aria-label="Estaciones favoritas"
+          aria-label={`${noun === 'paradas' ? 'Paradas' : 'Estaciones'} favoritas`}
           aria-expanded={favOpen}
-          title="Estaciones favoritas"
+          title={`${noun === 'paradas' ? 'Paradas' : 'Estaciones'} favoritas`}
           onClick={() => {
             setActive(0);
             if (!favOpen) setFavShown(favorites);
@@ -232,7 +291,7 @@ export function StopSearch({ stops, favorites, isFavorite, onToggleFavorite, onS
         </button>
       </div>
 
-      {mode === 'help' && <HelpCard />}
+      {mode === 'help' && <HelpCard mode={transport} />}
 
       {trainMode && (
         <ul className="search-results" role="listbox" aria-label={`Tren ${trainQuery}`}>
@@ -261,23 +320,25 @@ export function StopSearch({ stops, favorites, isFavorite, onToggleFavorite, onS
       {mode === 'search' && !trainQuery && searchResults.length > 0 && (
         <ul className="search-results" role="listbox">
           {searchResults.map((s, i) => (
-            <StopRow key={s.id} s={s} active={i === active} onPick={() => pick(s)} />
+            <StopRow key={s.id} s={s} meta={metaOf(s)} active={i === active} onPick={() => pick(s)} />
           ))}
         </ul>
       )}
 
       {favOpen && (
-        <ul className="search-results" role="listbox" aria-label="Estaciones favoritas">
+        <ul className="search-results" role="listbox" aria-label={`${noun} favoritas`}>
           <li className="search-heading">Tus favoritas</li>
           {favShown.length === 0 ? (
             <li className="search-empty">
-              Aún no tienes favoritas. Abre una estación y pulsa ☆ para añadirla.
+              Aún no tienes favoritas. Abre {noun === 'paradas' ? 'una parada' : 'una estación'} y pulsa ☆ para
+              añadirla.
             </li>
           ) : (
             favShown.map((s, i) => (
               <StopRow
                 key={s.id}
                 s={s}
+                meta={metaOf(s)}
                 active={i === active}
                 onPick={() => pick(s)}
                 fav={{ on: isFavorite(s.id), toggle: () => onToggleFavorite(s) }}

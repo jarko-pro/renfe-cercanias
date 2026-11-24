@@ -1,3 +1,5 @@
+import { BUS_FEEDS } from '@renfe/shared';
+import type { TransportMode } from '../lib/mode';
 import { CALENDAR } from './icons';
 
 /** Mismo icono que en las filas del panel: el tren se puede seguir en el mapa. */
@@ -14,7 +16,8 @@ const PIN = (
  * Ayuda corta (botón "?" del buscador). En el móvil no hay tooltips, así que es el único
  * sitio donde se explica qué significa cada etiqueta. Usa las mismas etiquetas que el panel.
  */
-export function HelpCard() {
+export function HelpCard({ mode = 'tren' }: { mode?: TransportMode }) {
+  if (mode === 'bus') return <BusHelp />;
   return (
     <div className="search-results help-card" role="dialog" aria-label="Cómo funciona">
       <h2>Cómo se usa</h2>
@@ -105,6 +108,61 @@ export function HelpCard() {
       <p className="help-foot">
         Datos abiertos de Renfe, actualizados cada 30 s. No es una app oficial de Renfe.{' '}
         <a href="/privacidad.html" target="_blank" rel="noopener">Privacidad</a>
+      </p>
+    </div>
+  );
+}
+
+/** Ayuda del modo autobús: menos etiquetas, porque la red solo da cuánto falta. */
+function BusHelp() {
+  const cities = BUS_FEEDS.map((f) => f.city).join(', ');
+  return (
+    <div className="search-results help-card" role="dialog" aria-label="Cómo funciona">
+      <h2>Cómo se usa</h2>
+      <ul className="help-steps">
+        <li>Toca una parada en el mapa o búscala por su nombre, su calle o el número que pone en la marquesina.</li>
+        <li>
+          Pulsa <span className="help-star">★</span> en una parada para tenerla a mano la próxima vez.
+        </li>
+        <li>Con el botón del tren, a la izquierda del buscador, vuelves a los trenes de Cercanías.</li>
+      </ul>
+
+      <h2>Qué significa cada cosa</h2>
+      <dl className="help-legend">
+        <dt>
+          <strong>6</strong> min
+        </dt>
+        <dd>Lo que le falta al próximo autobús de esa línea, en tiempo real. «Llegando»: está a punto de pasar.</dd>
+
+        <dt>siguiente en 18 min</dt>
+        <dd>El autobús que viene detrás, de la misma línea y con el mismo destino.</dd>
+
+        <dt>a 1,2 km</dt>
+        <dd>Lo que le queda por recorrer hasta la parada.</dd>
+
+        <dt>Sin autobuses ahora</dt>
+        <dd>Líneas que paran aquí pero no tienen ningún autobús en camino (por ejemplo, fuera de su horario).</dd>
+
+        <dt>
+          <span className="help-grey">En gris</span>
+        </dt>
+        <dd>Hace rato que no llegan datos nuevos. Revisa tu conexión.</dd>
+      </dl>
+
+      <p className="help-foot">
+        Por ahora, autobuses urbanos de {cities}. Datos abiertos de{' '}
+        {BUS_FEEDS.map((f, i) => (
+          <span key={f.id}>
+            {i > 0 && ', '}
+            <a href={f.sourceUrl} target="_blank" rel="noopener">
+              {f.source}
+            </a>
+          </span>
+        ))}
+        , actualizados cada 30 s. No es una app oficial.{' '}
+        <a href="/privacidad.html" target="_blank" rel="noopener">
+          Privacidad
+        </a>
       </p>
     </div>
   );

@@ -1,7 +1,18 @@
-import type { Stop } from '@renfe/shared';
+import { BUS_FEEDS, type Line } from '@renfe/shared';
 import L from 'leaflet';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { CircleMarker, MapContainer, Marker, Pane, Polyline, TileLayer, useMap, useMapEvents } from 'react-leaflet';
+import type { TransportMode } from '../lib/mode';
+import { BUS_PATH } from './icons';
+
+/** Lo que el mapa necesita de una estación de tren o una parada de autobús. */
+export interface MapStop {
+  id: string;
+  name: string;
+  lat: number;
+  lon: number;
+  lines: Line[];
+}
 
 export interface TrainPosition {
   tripId: string;
@@ -14,12 +25,13 @@ export interface TrainPosition {
 }
 
 interface Props {
-  stops: Stop[];
+  mode: TransportMode;
+  stops: MapStop[];
   selectedId: string | null;
   favoriteIds: string[];
   /** Parada a la que volar (cambia la referencia para volver a centrar). */
   focus: { lat: number; lon: number; zoom?: number; key: number } | null;
-  onSelect: (stop: Stop) => void;
+  onSelect: (stop: MapStop) => void;
   /** Tren que se está siguiendo, si lo hay. */
   train: TrainPosition | null;
   /** Trazado del tren seguido, de origen a destino. */
@@ -27,28 +39,34 @@ interface Props {
 }
 
 const SPAIN: [number, number] = [40.2, -3.7];
-const VIEW_KEY = 'renfe:view:v1';
+/** Cada modo recuerda su propia vista: los trenes en España entera, los buses en su ciudad. */
+const VIEW_KEYS: Record<TransportMode, string> = { tren: 'renfe:view:v1', bus: 'renfe:view:bus:v1' };
+/** En modo bus, por debajo de este zoom se ve una burbuja por ciudad en vez de sus paradas. */
+const BUS_MIN_ZOOM = 12;
+/** Todas las paradas de bus del mismo color: tienen muchas líneas y el color de una confundiría. */
+const BUS_COLOR = '#0b6bcb';
 
-/** Última vista del mapa guardada en el dispositivo; si no hay, España entera. */
-function initialView(): { center: [number, number]; zoom: number } {
+/** Última vista del mapa guardada en el dispositivo; si no hay, España entera (o la única ciudad con buses). */
+function initialView(mode: TransportMode): { center: [number, number]; zoom: number } {
   try {
-    const v = JSON.parse(localStorage.getItem(VIEW_KEY) ?? 'null');
+    const v = JSON.parse(localStorage.getItem(VIEW_KEYS[mode]) ?? 'null');
     if (v && Number.isFinite(v.lat) && Number.isFinite(v.lon) && Number.isFinite(v.zoom)) {
       return { center: [v.lat, v.lon], zoom: v.zoom };
     }
   } catch {
     /* sin almacenamiento o dato corrupto */
   }
+  if (mode === 'bus' && BUS_FEEDS.length === 1) return { center: BUS_FEEDS[0].center, zoom: BUS_FEEDS[0].zoom };
   return { center: SPAIN, zoom: 6 };
 }
 
 /** Guarda la vista cada vez que el mapa se para, para abrir ahí la próxima vez. */
-function RememberView() {
+function RememberView({ storageKey }: { storageKey: string }) {
   const map = useMapEvents({
     moveend: () => {
       const c = map.getCenter();
       try {
-        localStorage.setItem(VIEW_KEY, JSON.stringify({ lat: c.lat, lon: c.lng, zoom: map.getZoom() }));
+        localStorage.setItem(storageKey, JSON.stringify({ lat: c.lat, lon: c.lng, zoom: map.getZoom() }));
       } catch {
         /* modo privado: no se recuerda */
       }
@@ -134,7 +152,7 @@ function aheadOf(path: [number, number][], train: TrainPosition | null): [number
 }
 
 /** Al empezar a seguir un tren, encuadra la estación y el tren (una sola vez por tren). */
-function FitTrain({ train, stop }: { train: TrainPosition | null; stop: Stop | undefined }) {
+function FitTrain({ train, stop }: { train: TrainPosition | null; stop: MapStop | undefined }) {
   const map = useMap();
   const fitted = useRef<string | null>(null);
   useEffect(() => {
@@ -177,10 +195,10 @@ const TIP_HIDE_MS = 250;
  * si dos puntos se solapan, gana el más cercano al dedo. El nombre (al pasar el ratón) también se
  * puede pulsar, pero siempre después de los puntos: si el clic cae sobre un punto, gana el punto.
  */
-function StopHits({ stops, onSelect }: { stops: Stop[]; onSelect: (stop: Stop) => void }) {
+function StopHits({ stops, onSelect }: { stops: MapStop[]; onSelect: (stop: MapStop) => void }) {
   const map = useMap();
   const tooltip = useRef<L.Tooltip | null>(null);
-  const hovered = useRef<Stop | null>(null);
+  const hovered = useRef<MapStop | null>(null);
   const stopsRef = useRef(stops);
   stopsRef.current = stops;
   const onSelectRef = useRef(onSelect);
@@ -195,8 +213,8 @@ function StopHits({ stops, onSelect }: { stops: Stop[]; onSelect: (stop: Stop) =
     tooltip.current = tip;
 
     /** Estación más cercana al punto (coordenadas del contenedor), dentro del radio. */
-    const nearest = (p: L.Point, radius: number): Stop | null => {
-      let best: Stop | null = null;
+    const nearest = (p: L.Point, radius: number): MapStop | null => {
+      let best: MapStop | null = null;
       let bestD = radius * radius;
       const b = map.getBounds().pad(0.05);
       for (const s of stopsRef.current) {
@@ -231,7 +249,7 @@ function StopHits({ stops, onSelect }: { stops: Stop[]; onSelect: (stop: Stop) =
     };
 
     let hideTimer = 0;
-    const show = (s: Stop | null) => {
+    const show = (s: MapStop | null) => {
       if (s) {
         clearTimeout(hideTimer);
         hideTimer = 0;
@@ -319,6 +337,83 @@ function StopHits({ stops, onSelect }: { stops: Stop[]; onSelect: (stop: Stop) =
   return null;
 }
 
+/** Burbuja de una ciudad con autobuses (modo bus, mapa alejado): al tocarla se acerca a ella. */
+function cityIcon(city: string) {
+  return L.divIcon({
+    className: 'city-marker',
+    html:
+      `<span class="city-bubble"><svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true">` +
+      `<path fill="currentColor" d="${BUS_PATH}"/></svg>${city}</span>`,
+    iconSize: [140, 36],
+    iconAnchor: [70, 18],
+  });
+}
+
+/**
+ * Paradas de autobús. Alejado, una burbuja por ciudad (miles de paradas en España no se
+ * distinguirían); de cerca, solo las paradas de la zona visible.
+ */
+function BusLayer({
+  stops,
+  selectedId,
+  favoriteIds,
+  onSelect,
+}: {
+  stops: MapStop[];
+  selectedId: string | null;
+  favoriteIds: string[];
+  onSelect: (stop: MapStop) => void;
+}) {
+  const map = useMap();
+  const read = () => ({ zoom: map.getZoom(), bounds: map.getBounds().pad(0.25) });
+  const [view, setView] = useState(read);
+  useMapEvents({ moveend: () => setView(read()) });
+  const icons = useMemo(() => new Map(BUS_FEEDS.map((f) => [f.id, cityIcon(f.city)])), []);
+  const visible = useMemo(
+    () => (view.zoom < BUS_MIN_ZOOM ? [] : stops.filter((s) => view.bounds.contains([s.lat, s.lon]))),
+    [stops, view],
+  );
+
+  if (view.zoom < BUS_MIN_ZOOM) {
+    return (
+      <>
+        {BUS_FEEDS.map((f) => (
+          <Marker
+            key={f.id}
+            position={f.center}
+            icon={icons.get(f.id)!}
+            keyboard={false}
+            eventHandlers={{ click: () => map.flyTo(f.center, f.zoom, { duration: 0.8 }) }}
+          />
+        ))}
+      </>
+    );
+  }
+  const radius = view.zoom >= 15 ? 6 : view.zoom >= 14 ? 5 : 4;
+  return (
+    <>
+      {visible.map((s) => {
+        const selected = s.id === selectedId;
+        return (
+          <CircleMarker
+            key={s.id}
+            center={[s.lat, s.lon]}
+            radius={selected ? 10 : favoriteIds.includes(s.id) ? radius + 2 : radius}
+            pathOptions={{
+              color: selected ? '#111' : '#fff',
+              weight: selected ? 3 : 1.5,
+              fillColor: BUS_COLOR,
+              fillOpacity: 1,
+            }}
+            interactive={false}
+          />
+        );
+      })}
+      <StopHits stops={visible} onSelect={onSelect} />
+    </>
+  );
+}
+
 function RouteLine({ path, color }: { path: [number, number][]; color: string }) {
   return (
     <>
@@ -358,22 +453,30 @@ function LocateButton({ onLocated }: { onLocated: (lat: number, lon: number) => 
   );
 }
 
-export function MapView({ stops, selectedId, favoriteIds, focus, onSelect, train, route }: Props) {
+/** Atribución obligatoria de los datos abiertos de cada modo. */
+const OSM =
+  '&copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a> · <a href="/privacidad.html" target="_blank" rel="noopener">Privacidad</a>';
+const ATTRIBUTION: Record<TransportMode, string> = {
+  // Renfe exige citar la fuente ("Origen de los datos: Renfe Operadora") en sus datos abiertos.
+  tren: `Origen de los datos: <a href="https://data.renfe.com/" target="_blank" rel="noopener">Renfe Operadora</a> · ${OSM}`,
+  bus: `Datos: ${BUS_FEEDS.map((f) => `<a href="${f.sourceUrl}" target="_blank" rel="noopener">${f.source}</a>`).join(', ')} · ${OSM}`,
+};
+
+export function MapView({ mode, stops, selectedId, favoriteIds, focus, onSelect, train, route }: Props) {
   const selectedStop = useMemo(() => stops.find((s) => s.id === selectedId), [stops, selectedId]);
   const [userPos, setUserPos] = useState<[number, number] | null>(null);
   const [locFocus, setLocFocus] = useState<Props['focus']>(null);
-  const [view] = useState(initialView);
+  // Se lee una vez: al cambiar de modo, el mapa se monta de nuevo (key) con la vista de ese modo.
+  const [view] = useState(() => initialView(mode));
 
   return (
     <div className="map-wrap">
       <MapContainer center={view.center} zoom={view.zoom} preferCanvas zoomControl={false} className="map">
-        <TileLayer
-          // Renfe exige citar la fuente ("Origen de los datos: Renfe Operadora") en sus datos abiertos.
-          attribution='Origen de los datos: <a href="https://data.renfe.com/" target="_blank" rel="noopener">Renfe Operadora</a> · &copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a> · <a href="/privacidad.html" target="_blank" rel="noopener">Privacidad</a>'
-          url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-          maxZoom={19}
-        />
-        {stops.map((s) => {
+        <TileLayer attribution={ATTRIBUTION[mode]} url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" maxZoom={19} />
+        {mode === 'bus' && (
+          <BusLayer stops={stops} selectedId={selectedId} favoriteIds={favoriteIds} onSelect={onSelect} />
+        )}
+        {mode === 'tren' && stops.map((s) => {
           const selected = s.id === selectedId;
           const fav = favoriteIds.includes(s.id);
           return (
@@ -407,11 +510,11 @@ export function MapView({ stops, selectedId, favoriteIds, focus, onSelect, train
           </Pane>
         )}
         {train && <TrainMarker key={train.tripId} train={train} />}
-        <StopHits stops={stops} onSelect={onSelect} />
+        {mode === 'tren' && <StopHits stops={stops} onSelect={onSelect} />}
         <FitTrain train={train} stop={selectedStop} />
         <FlyTo focus={focus} />
         <FlyTo focus={locFocus} />
-        <RememberView />
+        <RememberView storageKey={VIEW_KEYS[mode]} />
       </MapContainer>
       <LocateButton
         onLocated={(lat, lon) => {

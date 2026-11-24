@@ -990,7 +990,14 @@ button.arrival.following.dx {
   display: flex;
 }
 .search-field input {
-  padding-right: 48px;
+  padding-right: 44px;
+}
+/* Con la píldora de modo al lado, cada píxel cuenta para el texto del buscador. */
+.search-bar {
+  gap: 6px;
+}
+.search-bar .search-field input {
+  padding-left: 14px;
 }
 .help-toggle {
   position: absolute;
@@ -1380,4 +1387,90 @@ button.arrival.following.dx {
   flex: none;
   max-height: 40%;
   overflow: auto;
+}
+
+/* ---------- Modo Trenes | Buses (píldora a la izquierda del buscador) ---------- */
+.mode-switch {
+  flex: none;
+  display: flex;
+  gap: 2px;
+  height: 48px;
+  padding: 4px;
+  border-radius: var(--radius);
+  background: var(--surface);
+  box-shadow: var(--shadow);
+}
+.mode-switch button {
+  width: 34px;
+  border: none;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--text-2);
+  cursor: pointer;
+  display: grid;
+  place-items: center;
+  transition: background 0.15s, color 0.15s;
+}
+.mode-switch button:hover:not(.on) {
+  background: var(--surface-2);
+  color: var(--text);
+}
+.mode-switch button.on {
+  background: var(--brand);
+  color: #fff;
+}
+.mode-bus .mode-switch button.on {
+  background: var(--bus);
+}
+.mode-switch button:focus-visible {
+  outline: 2px solid var(--brand);
+  outline-offset: 1px;
+}
+:root {
+  --bus: #0b6bcb;
+}
+/* En modo bus, el color de acento (foco, contador de favoritas…) es el de los buses. */
+.mode-bus {
+  --brand: var(--bus);
+}
+
+/* Burbuja de ciudad en modo bus con el mapa alejado. */
+.city-marker {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.city-bubble {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 12px;
+  border-radius: 999px;
+  background: var(--bus);
+  color: #fff;
+  font: 700 14px/1 system-ui, sans-serif;
+  white-space: nowrap;
+  box-shadow: var(--shadow);
+  cursor: pointer;
+}
+
+/* Panel de una parada de autobús: una fila por línea y destino, como en las marquesinas. */
+.bus-row:last-child {
+  border-bottom: none;
+}
+.bus-idle {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+  padding: 10px 16px 12px;
+  border-top: 1px solid var(--border);
+  font-size: 12px;
+  color: var(--text-2);
+}
+.bus-idle > span:first-child {
+  margin-right: 2px;
+}
+.bus-idle .line-chip {
+  opacity: 0.55;
 }
