@@ -426,7 +426,9 @@ function RouteLine({ path, color }: { path: [number, number][]; color: string })
 /** Tu ubicación: punto azul con un halo que late, para que no se confunda con una estación. */
 const USER_ICON = L.divIcon({
   className: 'user-marker',
-  html: '<span class="user-dot"></span>',
+  // Halo y punto como dos elementos apilados (sin ::after, inset ni z-index negativo), para
+  // que se vea igual en los motores antiguos que puede usar la app de Android.
+  html: '<span class="user-halo"></span><span class="user-dot"></span>',
   iconSize: [22, 22],
   iconAnchor: [11, 11],
 });
