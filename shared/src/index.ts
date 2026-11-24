@@ -137,7 +137,74 @@ export interface HealthResponse {
     /** Estadísticas de referencia: días usados y cuántos trenes y franjas de línea tienen datos. */
     insights: { loadedAt: number; days: number; trains: number; trainStops: number; lines: number } | null;
   };
+  /** Memoria del proceso en MB. `maxRss` es el pico desde que arrancó (p. ej. al recargar el GTFS). */
+  mem?: { rss: number; maxRss: number; heapUsed: number; heapTotal: number; external: number; arrayBuffers: number };
+  /** Retardo del event loop en ms en la última ventana de 5 min (si sube, las respuestas tardan). */
+  eventLoop?: { p99Ms: number; maxMs: number };
+  uptimeSec?: number;
+  /** Redes de autobús activas (BUS_FEEDS). */
+  bus?: BusFeedStatus[];
   error?: string;
+}
+
+/** Estado de una red de autobús, para /api/health. */
+export interface BusFeedStatus {
+  feed: string;
+  stops: number;
+  staticLoadedAt: number | null;
+  fetchedAt: number | null;
+  /** Filas de estimación (parada × línea) en la última lectura. */
+  estimates: number;
+  /** Lecturas descartadas por venir vacías o a medias desde que arrancó. */
+  badReads: number;
+  /** Pasos de bus por parada detectados hoy (la base de la puntualidad). */
+  passesToday: number;
+  history: { enabled: boolean; pending: number; saved: number; lastError: string | null };
+  error?: string;
+}
+
+/**
+ * Parada de autobús. `id` lleva la red delante ("santander:328") para no chocar con las
+ * estaciones de Renfe; `code` es el número que pone en la marquesina.
+ */
+export interface BusStop {
+  id: string;
+  feed: string;
+  code: string;
+  name: string;
+  /** Hacia dónde van los buses de esta parada, si la red lo publica ("Los Agustinos"). */
+  towards?: string;
+  lat: number;
+  lon: number;
+  lines: Line[];
+}
+
+/** Un bus que viene hacia la parada. */
+export interface BusEta {
+  /** Hora estimada de llegada (epoch ms). */
+  estimated: number;
+  /** Minutos que faltan al generar la respuesta (0 = llegando). La web lo recalcula en vivo. */
+  minutes: number;
+  /** Distancia en metros por la ruta, si la red la da. */
+  distanceM?: number;
+}
+
+/** Una línea en un sentido, con sus próximos buses en la parada (como en las marquesinas). */
+export interface BusLineArrivals {
+  line: Line;
+  headsign: string;
+  next: BusEta[];
+}
+
+export interface BusArrivalsResponse {
+  stop: BusStop;
+  generatedAt: number;
+  /** Segundos desde la última lectura buena de la red (null si aún no hay ninguna). */
+  realtimeAgeSec: number | null;
+  /** Ordenadas por el primer bus que llega. */
+  lines: BusLineArrivals[];
+  /** Líneas de la parada sin ningún bus en camino ahora (p. ej., fuera de su horario). */
+  idle: Line[];
 }
 
 /** Resultado de buscar un tren por su número. */
@@ -199,3 +266,4 @@ export interface TripTimes {
 }
 
 export * from './slug';
+export * from './feeds';

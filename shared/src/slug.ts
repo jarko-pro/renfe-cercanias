@@ -32,3 +32,12 @@ export const stopPath = (slug: string) => `/estacion/${slug}/`;
 export function slugFromPath(pathname: string): string | null {
   return /^\/estacion\/([a-z0-9-]+)\/?$/.exec(pathname)?.[1] ?? null;
 }
+
+/** Ruta de la página de una parada de autobús, p. ej. "/bus/santander/parada/328/". */
+export const busStopPath = (feed: string, code: string) => `/bus/${feed}/parada/${encodeURIComponent(code)}/`;
+
+/** Red y número de parada si la ruta es la de una parada de autobús. */
+export function busStopFromPath(pathname: string): { feed: string; code: string } | null {
+  const m = /^\/bus\/([a-z]+)\/parada\/([A-Za-z0-9_-]+)\/?$/.exec(pathname);
+  return m ? { feed: m[1], code: m[2] } : null;
+}

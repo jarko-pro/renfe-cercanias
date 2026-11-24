@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto';
+import { monitorEventLoopDelay } from 'node:perf_hooks';
 import { fileURLToPath } from 'node:url';
 import cors from '@fastify/cors';
 import type { ArrivalsResponse, HealthResponse, Stop, StopTimetable, TrainMatch, TripShape, TripTimes } from '@renfe/shared';
@@ -20,6 +21,8 @@ import { registerStats } from './stats.js';
 import { createHistory } from './history/index.js';
 import { dayType, lineAnomalies, type LineAnomaly } from './history/insights.js';
 import { addDays, localDate, tzOffsetMs } from './time.js';
+import { createBus, parseBusFeeds } from './bus/index.js';
+import { createBusHistory } from './bus/history.js';
 
 const PORT = Number(process.env.PORT ?? 3001);
 const ZIP_PATH = fileURLToPath(new URL('../data/fomento_transit.zip', import.meta.url));
@@ -39,6 +42,30 @@ const app = Fastify({
 });
 await app.register(cors, { origin: true });
 
+const mb = (bytes: number) => Math.round(bytes / 1048576);
+/** Memoria del proceso en MB (el plan gratuito de Render tiene 512 MB). */
+function memoryMb(): NonNullable<HealthResponse['mem']> {
+  const m = process.memoryUsage();
+  return {
+    rss: mb(m.rss),
+    maxRss: mb(process.resourceUsage().maxRSS * 1024),
+    heapUsed: mb(m.heapUsed),
+    heapTotal: mb(m.heapTotal),
+    external: mb(m.external),
+    arrayBuffers: mb(m.arrayBuffers),
+  };
+}
+
+// Retardo del event loop por ventanas de 5 min: si una carga pesada (GTFS, estadísticas)
+// bloquea el proceso, las respuestas a los usuarios se retrasan lo mismo.
+const loopDelay = monitorEventLoopDelay({ resolution: 20 });
+loopDelay.enable();
+let loopWindow = { p99Ms: 0, maxMs: 0 };
+setInterval(() => {
+  loopWindow = { p99Ms: Math.round(loopDelay.percentile(99) / 1e6), maxMs: Math.round(loopDelay.max / 1e6) };
+  loopDelay.reset();
+}, 5 * 60_000);
+
 let gtfs: GtfsData | null = null;
 let gtfsError: string | null = null;
 let stopsJson = '[]';
@@ -57,8 +84,10 @@ async function refreshGtfs() {
     stopsEtag = `"${createHash('sha1').update(stopsJson).digest('hex').slice(0, 16)}"`;
     gtfs = data;
     gtfsError = null;
+    const m = memoryMb();
     app.log.info(
-      `GTFS cargado en ${((Date.now() - t0) / 1000).toFixed(1)} s: ${stops.length} paradas, ${data.trips.size} viajes activos`,
+      `GTFS cargado en ${((Date.now() - t0) / 1000).toFixed(1)} s: ${stops.length} paradas, ${data.trips.size} viajes activos` +
+        ` · RSS ${m.rss} MB (pico ${m.maxRss}, heap ${m.heapUsed})`,
     );
   } catch (err) {
     gtfsError = (err as Error).message;
@@ -93,6 +122,16 @@ const history = createHistory(
   process.env.HISTORY_READ_ONLY === '1',
 );
 setInterval(() => history.observe(realtime.state, positions.state.vehicles), 10_000);
+
+// Autobuses: solo las redes de BUS_FEEDS (p. ej. "santander"). Sin esa variable, nada cambia.
+// Su histórico va en otra base de datos (DATABASE_URL_BUS) para que no pueda llenar la de trenes.
+const busLog = { info: (m: string) => app.log.info(m), warn: (m: string) => app.log.warn(m) };
+const busHistory = createBusHistory(
+  process.env.DATABASE_URL_BUS,
+  busLog,
+  process.env.BUS_HISTORY_READ_ONLY === '1',
+);
+const bus = createBus(parseBusFeeds(process.env.BUS_FEEDS), busLog, busHistory);
 
 const localHour = (ms: number) => new Date(ms + tzOffsetMs(ms)).getUTCHours();
 
@@ -148,6 +187,10 @@ app.get('/api/health', { logLevel: 'warn' }, async (): Promise<HealthResponse> =
   vehicles: positions.state.vehicles.size,
   alerts: alerts.state.alerts.length,
   history: { ...history.status },
+  mem: memoryMb(),
+  eventLoop: loopWindow,
+  uptimeSec: Math.round(process.uptime()),
+  ...(bus.enabled() ? { bus: bus.status() } : {}),
   ...(gtfsError ? { error: gtfsError } : {}),
 }));
 
@@ -252,6 +295,28 @@ app.get('/api/insights', async (_req, reply) => {
     hour: localHour(now),
     anomalies: currentAnomalies(),
   };
+});
+
+// Paradas de una red de autobús. Cambian como mucho una vez al día.
+app.get<{ Params: { feed: string } }>('/api/bus/:feed/stops', async (req, reply) => {
+  const feed = bus.feed(req.params.feed);
+  if (!feed) return reply.code(404).send({ error: 'Red de autobús no disponible' });
+  const stops = feed.stops();
+  if (!stops) return reply.code(503).send({ error: 'Cargando paradas, prueba en unos segundos' });
+  reply.header('ETag', stops.etag).header('Cache-Control', 'public, max-age=3600');
+  if (req.headers['if-none-match'] === stops.etag) return reply.code(304).send();
+  return reply.type('application/json').send(stops.json);
+});
+
+// Próximos buses de una parada (por su número de marquesina), por línea y destino.
+app.get<{ Params: { feed: string; code: string } }>('/api/bus/:feed/stops/:code/arrivals', async (req, reply) => {
+  const feed = bus.feed(req.params.feed);
+  if (!feed) return reply.code(404).send({ error: 'Red de autobús no disponible' });
+  const res = feed.arrivals(req.params.code, Date.now());
+  if (res === 'loading') return reply.code(503).send({ error: 'Cargando paradas, prueba en unos segundos' });
+  if (!res) return reply.code(404).send({ error: 'Parada no encontrada' });
+  reply.header('Cache-Control', 'no-store');
+  return res;
 });
 
 registerStats(app);

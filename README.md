@@ -67,6 +67,7 @@ La primera vez, el servidor descarga el GTFS de Renfe (~16 MB) en `server/data/`
   - `src/live.ts`, `src/shape.ts`: posición y trazado del tren que se sigue.
   - `src/alerts.ts`: avisos por estación. Renfe no da gravedad ni fecha de fin, así que se deducen del texto.
   - `src/history/`: histórico de retrasos de cada tren en Postgres.
+  - `src/bus/`: autobuses urbanos (solo las redes de `BUS_FEEDS`). Hoy, Santander con los datos abiertos del Ayuntamiento: paradas, líneas y, cada 30 s, los dos próximos buses de cada parada y línea. Como no hay id de viaje, la hora real a la que pasa cada bus se deduce de esas estimaciones (`passes.ts`) y se guarda en otra base de datos (`DATABASE_URL_BUS`).
   - `src/stats.ts`: reenvía las estadísticas de uso a Umami, sin guardar IPs.
 - `web/`: React + Vite + Leaflet.
   - `scripts/station-pages.ts`: tras el build, genera una página estática por estación, el `404.html` y el `sitemap.xml`.
@@ -81,7 +82,9 @@ La primera vez, el servidor descarga el GTFS de Renfe (~16 MB) en `server/data/`
 | `GET /api/trips/:tripId/live` | Posición en directo de un tren |
 | `GET /api/trips/:tripId/shape` | Trazado de un tren |
 | `GET /api/trains/:number` | Buscar un tren por su número |
-| `GET /api/health` | Estado del GTFS y del tiempo real |
+| `GET /api/health` | Estado del GTFS y del tiempo real, memoria del proceso y redes de autobús |
+| `GET /api/bus/:feed/stops` | Paradas de una red de autobús (con ETag) |
+| `GET /api/bus/:feed/stops/:code/arrivals` | Próximos autobuses de una parada, por línea y destino |
 
 ### Fuentes de datos
 
@@ -99,4 +102,5 @@ Algunas cosas que conviene saber de los datos de Renfe:
 ### Publicación
 
 - **Web**: GitHub Pages, en `cercaniasendirecto.com`. Se despliega sola con `.github/workflows/pages.yml` en cada push a `main` que cambie `web/` o `shared/`. Lee la URL del servidor de la variable de repositorio `API_URL`, y el ID de Umami de `UMAMI_ID`.
+- **Autobuses**: se activan en el servidor con `BUS_FEEDS=santander` (sin ella no se lee nada de buses). El histórico de buses va en un segundo proyecto de Supabase (`DATABASE_URL_BUS`); con `BUS_HISTORY_READ_ONLY=1` no se escribe en él (para probar en local).
 - **Servidor**: Render, plan gratuito, definido en `render.yaml`. El plan gratuito se duerme tras 15 min sin uso; para evitarlo, el propio servidor llama a su URL pública cada 10 min (`.github/workflows/keepalive.yml` hace de respaldo). La web guarda la lista de estaciones en el dispositivo y reintenta sola si el servidor está despertando.
