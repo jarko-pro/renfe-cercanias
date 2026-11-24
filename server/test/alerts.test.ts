@@ -114,6 +114,31 @@ describe('alertsForStop', () => {
     expect(alertsForStop(data, ALERTS, 'P').some((a) => a.kind === 'access')).toBe(true);
   });
 
+  describe('líneas que hoy van peor de lo normal', () => {
+    // El núcleo son los 2 primeros caracteres del route_id (aquí "R3" y "R4").
+    const c3 = { network: 'R3', line: 'C3', nowDelaySec: 720, normalDelaySec: 290, trains: 4 };
+
+    it('sale en las estaciones de esa línea, detrás de lo grave y delante del resto', () => {
+      const res = alertsForStop(data, ALERTS, 'P', [c3]);
+      expect(res.map((a) => a.kind)).toEqual(['service', 'delays', 'service', 'access']);
+      expect(res[1]).toMatchObject({ severe: false, here: false, id: 'delays-R3-C3' });
+      expect(res[1].lines.map((l) => l.name)).toEqual(['C3']);
+      expect(res[1].text).toBe(
+        'Hoy va peor de lo normal: sus trenes llevan unos 12 min de retraso, cuando a esta hora suelen llevar 5.',
+      );
+    });
+
+    it('no sale en estaciones de otras líneas ni con el mismo nombre de línea en otro núcleo', () => {
+      expect(alertsForStop(data, [], 'Z', [c3])).toEqual([]);
+      expect(alertsForStop(data, [], 'P', [{ ...c3, network: 'XX' }])).toEqual([]);
+    });
+
+    it('si lo normal es ir en hora, lo dice así', () => {
+      const [a] = alertsForStop(data, [], 'A', [{ ...c3, normalDelaySec: 20 }]);
+      expect(a.text).toMatch(/cuando a esta hora suelen ir en hora\.$/);
+    });
+  });
+
   it('no cuenta como "aquí" el nombre de la ciudad (Madrid aparece en casi todo)', () => {
     const res = alertsForStop(data, [alert('Trenes con origen o destino Madrid suspendidos', ['R3'])], 'A');
     expect(res[0].here).toBe(false);

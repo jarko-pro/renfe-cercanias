@@ -94,8 +94,11 @@ export interface StopAlert {
   text: string;
   /** Líneas de esta estación a las que afecta (vacío si es un aviso solo de la estación). */
   lines: Line[];
-  /** 'access': ascensores, escaleras, accesibilidad. 'service': todo lo demás. */
-  kind: 'service' | 'access';
+  /**
+   * 'access': ascensores, escaleras, accesibilidad. 'service': todo lo demás. 'delays': no es de
+   * Renfe, lo calculamos: la línea va hoy peor de lo normal a esta hora según el histórico.
+   */
+  kind: 'service' | 'access' | 'delays';
   /** Corta o altera mucho el servicio (suspendido, no circula, autobús...). */
   severe: boolean;
   /** Afecta a esta estación en concreto (la nombra o va asociado a ella). */

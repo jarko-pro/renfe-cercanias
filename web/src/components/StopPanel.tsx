@@ -77,9 +77,13 @@ function AlertList({ alerts }: { alerts: StopAlert[] }) {
   return (
     <ul className="alerts">
       {alerts.map((a) => (
-        <li key={a.id} className={`alert${a.severe ? ' severe' : ''}`}>
+        <li
+          key={a.id}
+          className={`alert${a.severe ? ' severe' : ''}`}
+          title={a.kind === 'delays' ? 'Calculado con el histórico de retrasos de los últimos días' : undefined}
+        >
           <span className="alert-icon" aria-hidden="true">
-            {a.kind === 'access' ? '♿' : '⚠'}
+            {a.kind === 'access' ? '♿' : a.kind === 'delays' ? '⏱' : '⚠'}
           </span>
           <span className="alert-body">
             {a.lines.length > 0 && (

@@ -4,7 +4,7 @@ import cors from '@fastify/cors';
 import type { ArrivalsResponse, HealthResponse, Stop, StopTimetable, TrainMatch, TripShape, TripTimes } from '@renfe/shared';
 import Fastify from 'fastify';
 import { alertsForStop } from './alerts.js';
-import { getArrivals } from './arrivals.js';
+import { getArrivals, leftOrigin } from './arrivals.js';
 import { downloadGtfs, loadGtfs } from './gtfs/loader.js';
 import type { GtfsData } from './gtfs/types.js';
 import { tripLiveNow } from './live.js';
@@ -18,7 +18,7 @@ import { getStopTimetable, getTripTimes } from './timetable.js';
 import { withPunctuality } from './punctuality.js';
 import { registerStats } from './stats.js';
 import { createHistory } from './history/index.js';
-import { dayType, lineAnomalies } from './history/insights.js';
+import { dayType, lineAnomalies, type LineAnomaly } from './history/insights.js';
 import { addDays, localDate, tzOffsetMs } from './time.js';
 
 const PORT = Number(process.env.PORT ?? 3001);
@@ -86,11 +86,40 @@ const rtView = () => ({ trips: realtime.state.trips, vehicles: positions.state.v
 // Los avisos cambian poco: cada 2 min basta.
 const alerts = createAlertsPoller(2 * 60_000, (m) => app.log.warn(m));
 // Histórico de retrasos (Postgres en DATABASE_URL). Cada 10 s mira si hay una lectura nueva del feed.
-const history = createHistory(process.env.DATABASE_URL, () => gtfs, {
-  info: (m) => app.log.info(m),
-  warn: (m) => app.log.warn(m),
-});
+const history = createHistory(
+  process.env.DATABASE_URL,
+  () => gtfs,
+  { info: (m) => app.log.info(m), warn: (m) => app.log.warn(m) },
+  process.env.HISTORY_READ_ONLY === '1',
+);
 setInterval(() => history.observe(realtime.state, positions.state.vehicles), 10_000);
+
+const localHour = (ms: number) => new Date(ms + tzOffsetMs(ms)).getUTCHours();
+
+/**
+ * Líneas que hoy van peor de lo normal a esta hora. Se calcula una vez por lectura del feed.
+ * Solo cuentan los trenes que circulan (con posición y ya fuera de su origen: los que siguen en
+ * él suman retraso sin parar y no dicen cómo va la línea).
+ */
+let anomaliesCache: { key: string; value: LineAnomaly[] } = { key: '', value: [] };
+function currentAnomalies(): LineAnomaly[] {
+  const ins = history.insights();
+  if (!gtfs || !ins) return [];
+  const now = Date.now();
+  const hour = localHour(now);
+  const key = `${realtime.state.fetchedAt}|${ins.loadedAt}|${hour}`;
+  if (anomaliesCache.key === key) return anomaliesCache.value;
+  const live: { network: string; line: string; delaySec: number }[] = [];
+  for (const [tripId, rt] of realtime.state.trips) {
+    const v = positions.state.vehicles.get(tripId);
+    if (rt.cancelled || rt.delaySec == null || !v || !leftOrigin(gtfs, tripId, v)) continue;
+    const routeId = gtfs.trips.get(tripId)?.routeId;
+    const line = routeId && gtfs.lines.get(routeId)?.name;
+    if (routeId && line) live.push({ network: routeId.slice(0, 2), line, delaySec: rt.delaySec });
+  }
+  anomaliesCache = { key, value: lineAnomalies(ins, live, dayType(localDate(now)), hour) };
+  return anomaliesCache.value;
+}
 
 // Render (plan gratuito) duerme el servidor tras 15 min sin tráfico entrante. Llamar a
 // nuestra propia URL pública sale a internet y vuelve a entrar por Render, así que cuenta
@@ -146,7 +175,7 @@ app.get<{ Params: { id: string } }>('/api/stops/:id/arrivals', async (req, reply
       stop.id,
       now,
     ),
-    alerts: alertsForStop(gtfs, alerts.state.alerts, stop.id),
+    alerts: alertsForStop(gtfs, alerts.state.alerts, stop.id, currentAnomalies()),
   };
   reply.header('Cache-Control', 'no-store');
   return res;
@@ -211,23 +240,18 @@ app.get<{ Params: { number: string } }>('/api/trains/:number', async (req, reply
   return res;
 });
 
-// Provisional, para comprobar las estadísticas antes de llevarlas a la interfaz: qué líneas van
-// hoy peor de lo normal a esta hora. Solo cuenta los trenes que están circulando (con posición).
+// Para comprobar las estadísticas: qué líneas van hoy peor de lo normal a esta hora.
 app.get('/api/insights', async (_req, reply) => {
-  const ins = history.insights();
   reply.header('Cache-Control', 'no-store');
-  if (!gtfs || !ins) return { ready: false, status: history.status.insights };
+  if (!gtfs || !history.insights()) return { ready: false, status: history.status.insights };
   const now = Date.now();
-  const hour = new Date(now + tzOffsetMs(now)).getUTCHours();
-  const dt = dayType(localDate(now));
-  const live: { network: string; line: string; delaySec: number }[] = [];
-  for (const [tripId, rt] of realtime.state.trips) {
-    if (rt.cancelled || rt.delaySec == null || !positions.state.vehicles.has(tripId)) continue;
-    const routeId = gtfs.trips.get(tripId)?.routeId;
-    const line = routeId && gtfs.lines.get(routeId)?.name;
-    if (routeId && line) live.push({ network: routeId.slice(0, 2), line, delaySec: rt.delaySec });
-  }
-  return { ready: true, status: history.status.insights, dayType: dt, hour, anomalies: lineAnomalies(ins, live, dt, hour) };
+  return {
+    ready: true,
+    status: history.status.insights,
+    dayType: dayType(localDate(now)),
+    hour: localHour(now),
+    anomalies: currentAnomalies(),
+  };
 });
 
 registerStats(app);

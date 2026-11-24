@@ -1,5 +1,6 @@
 import type { Line, StopAlert } from '@renfe/shared';
 import type { GtfsData } from './gtfs/types.js';
+import type { LineAnomaly } from './history/insights.js';
 import type { AlertInfo } from './realtime/alerts.js';
 
 /** Ascensores, escaleras, accesibilidad: útil, pero no afecta a los trenes. */
@@ -33,12 +34,50 @@ function mentions(text: string, name: string): boolean {
   return nameVariants(name).some((v) => t.includes(` ${v.replace(/[^a-z0-9ñ]+/g, ' ').trim()} `));
 }
 
-/** Avisos que afectan a una estación: los asociados a ella y los de las líneas que paran ahí. */
-export function alertsForStop(data: GtfsData, alerts: AlertInfo[], stopId: string): StopAlert[] {
+const mins = (sec: number) => Math.max(0, Math.round(sec / 60));
+
+/** Aviso nuestro (no de Renfe) para una línea que hoy va peor de lo normal a esta hora. */
+function delayAlert(a: LineAnomaly, line: Line): StopAlert {
+  const normal = mins(a.normalDelaySec);
+  return {
+    id: `delays-${a.network}-${a.line}`,
+    text:
+      `Hoy va peor de lo normal: sus trenes llevan unos ${mins(a.nowDelaySec)} min de retraso, ` +
+      (normal > 0 ? `cuando a esta hora suelen llevar ${normal}.` : 'cuando a esta hora suelen ir en hora.'),
+    lines: [line],
+    kind: 'delays',
+    severe: false,
+    here: false,
+  };
+}
+
+/**
+ * Avisos que afectan a una estación: los asociados a ella y los de las líneas que paran ahí, más
+ * los nuestros de las líneas que hoy van peor de lo normal (`anomalies`).
+ */
+export function alertsForStop(
+  data: GtfsData,
+  alerts: AlertInfo[],
+  stopId: string,
+  anomalies: LineAnomaly[] = [],
+): StopAlert[] {
   const stop = data.stops.get(stopId);
   if (!stop) return [];
   const stopRoutes = data.routesByStop.get(stopId) ?? new Set<string>();
   const out: StopAlert[] = [];
+
+  if (anomalies.length) {
+    // Líneas de esta estación, por núcleo y nombre (el mismo nombre se repite en otros núcleos).
+    const here = new Map<string, Line>();
+    for (const r of stopRoutes) {
+      const l = data.lines.get(r);
+      if (l) here.set(`${r.slice(0, 2)}|${l.name}`, l);
+    }
+    for (const a of anomalies) {
+      const l = here.get(`${a.network}|${a.line}`);
+      if (l) out.push(delayAlert(a, l));
+    }
+  }
 
   for (const a of alerts) {
     const atStop = a.stopIds.has(stopId);
@@ -64,6 +103,7 @@ export function alertsForStop(data: GtfsData, alerts: AlertInfo[], stopId: strin
     });
   }
 
-  const rank = (a: StopAlert) => (a.severe && a.here ? 0 : a.severe ? 1 : a.kind === 'service' ? 2 : 3);
+  const rank = (a: StopAlert) =>
+    a.severe && a.here ? 0 : a.severe ? 1 : a.kind === 'delays' ? 2 : a.kind === 'service' ? 3 : 4;
   return out.sort((a, b) => rank(a) - rank(b));
 }

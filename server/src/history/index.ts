@@ -25,6 +25,11 @@ export function createHistory(
   url: string | undefined,
   getData: () => GtfsData | null,
   log: { info(m: string): void; warn(m: string): void },
+  /**
+   * Solo leer (HISTORY_READ_ONLY=1): para probar en local con la base de datos de producción
+   * sin escribir en ella (un servidor local guardaría viajes a medias).
+   */
+  readOnly = false,
 ) {
   const pool = url
     ? new pg.Pool({
@@ -89,10 +94,11 @@ export function createHistory(
     const today = localDate(now);
     queue.push(...collector.collect(data, today, now));
     status.pending = collector.pending();
-    if (!db) {
-      if (queue.length) log.info(`Histórico (sin base de datos): ${queue.length} viajes cerrados`);
+    if (!db || readOnly) {
+      if (queue.length) log.info(`Histórico (${db ? 'solo lectura' : 'sin base de datos'}): ${queue.length} viajes cerrados`);
       status.saved += queue.length;
       queue = [];
+      if (db) await refreshInsights(today, now);
       return;
     }
     try {
@@ -120,8 +126,10 @@ export function createHistory(
   // Al arrancar no se espera a la primera vuelta de 5 min para tener las estadísticas.
   if (db) void (async () => {
     try {
-      ready ??= migrate(db);
-      await ready;
+      if (!readOnly) {
+        ready ??= migrate(db);
+        await ready;
+      }
       const recent = await loadRecentRuns(db);
       collector.restore(recent);
       log.info(`Histórico: ${recent.length} viajes recientes recuperados para el horario`);
