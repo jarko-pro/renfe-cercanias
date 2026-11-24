@@ -1474,3 +1474,45 @@ button.arrival.following.dx {
 .bus-idle .line-chip {
   opacity: 0.55;
 }
+
+/* ---------- Tu ubicación: punto azul con halo que late (no se confunde con las estaciones) ---------- */
+.user-marker {
+  display: grid;
+  place-items: center;
+}
+.user-dot {
+  position: relative;
+  display: block;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: #1a73e8;
+  border: 3px solid #fff;
+  box-shadow: 0 1px 5px rgba(0, 0, 0, 0.45);
+}
+.user-dot::after {
+  content: '';
+  position: absolute;
+  inset: -3px;
+  border-radius: 50%;
+  background: rgba(26, 115, 232, 0.45);
+  z-index: -1;
+  animation: user-pulse 2s ease-out infinite;
+}
+@keyframes user-pulse {
+  0% {
+    transform: scale(1);
+    opacity: 0.9;
+  }
+  100% {
+    transform: scale(3.2);
+    opacity: 0;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .user-dot::after {
+    animation: none;
+    transform: scale(2);
+    opacity: 0.35;
+  }
+}

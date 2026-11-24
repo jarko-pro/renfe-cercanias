@@ -1,7 +1,7 @@
 import { BUS_FEEDS, type Line } from '@renfe/shared';
 import L from 'leaflet';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { CircleMarker, MapContainer, Marker, Pane, Polyline, TileLayer, useMap, useMapEvents } from 'react-leaflet';
+import { Circle, CircleMarker, MapContainer, Marker, Pane, Polyline, TileLayer, useMap, useMapEvents } from 'react-leaflet';
 import type { TransportMode } from '../lib/mode';
 import { BUS_PATH } from './icons';
 
@@ -423,7 +423,39 @@ function RouteLine({ path, color }: { path: [number, number][]; color: string })
   );
 }
 
-function LocateButton({ onLocated }: { onLocated: (lat: number, lon: number) => void }) {
+/** Tu ubicación: punto azul con un halo que late, para que no se confunda con una estación. */
+const USER_ICON = L.divIcon({
+  className: 'user-marker',
+  html: '<span class="user-dot"></span>',
+  iconSize: [22, 22],
+  iconAnchor: [11, 11],
+});
+
+interface UserPosition {
+  lat: number;
+  lon: number;
+  /** Radio de precisión del GPS en metros. */
+  accuracy: number;
+}
+
+function UserMarker({ pos }: { pos: UserPosition }) {
+  return (
+    <>
+      {/* Precisión del GPS: solo si aporta algo (ni diminuta ni enorme). */}
+      {pos.accuracy > 15 && pos.accuracy < 1500 && (
+        <Circle
+          center={[pos.lat, pos.lon]}
+          radius={pos.accuracy}
+          interactive={false}
+          pathOptions={{ color: '#1a73e8', weight: 1, opacity: 0.35, fillColor: '#1a73e8', fillOpacity: 0.1 }}
+        />
+      )}
+      <Marker position={[pos.lat, pos.lon]} icon={USER_ICON} keyboard={false} interactive={false} zIndexOffset={900} />
+    </>
+  );
+}
+
+function LocateButton({ onLocated }: { onLocated: (pos: UserPosition) => void }) {
   const [state, setState] = useState<'idle' | 'busy' | 'error'>('idle');
   const locate = () => {
     if (!('geolocation' in navigator)) return setState('error');
@@ -431,7 +463,7 @@ function LocateButton({ onLocated }: { onLocated: (lat: number, lon: number) => 
     navigator.geolocation.getCurrentPosition(
       (pos) => {
         setState('idle');
-        onLocated(pos.coords.latitude, pos.coords.longitude);
+        onLocated({ lat: pos.coords.latitude, lon: pos.coords.longitude, accuracy: pos.coords.accuracy });
       },
       () => setState('error'),
       { enableHighAccuracy: true, timeout: 10_000 },
@@ -464,7 +496,7 @@ const ATTRIBUTION: Record<TransportMode, string> = {
 
 export function MapView({ mode, stops, selectedId, favoriteIds, focus, onSelect, train, route }: Props) {
   const selectedStop = useMemo(() => stops.find((s) => s.id === selectedId), [stops, selectedId]);
-  const [userPos, setUserPos] = useState<[number, number] | null>(null);
+  const [userPos, setUserPos] = useState<UserPosition | null>(null);
   const [locFocus, setLocFocus] = useState<Props['focus']>(null);
   // Se lee una vez: al cambiar de modo, el mapa se monta de nuevo (key) con la vista de ese modo.
   const [view] = useState(() => initialView(mode));
@@ -495,14 +527,7 @@ export function MapView({ mode, stops, selectedId, favoriteIds, focus, onSelect,
             />
           );
         })}
-        {userPos && (
-          <CircleMarker
-            center={userPos}
-            radius={8}
-            interactive={false}
-            pathOptions={{ color: '#fff', weight: 3, fillColor: '#2563eb', fillOpacity: 1 }}
-          />
-        )}
+        {userPos && <UserMarker pos={userPos} />}
         {route && (
           // Por debajo de las paradas (overlayPane = 400) para que se vean encima de la vía.
           <Pane name="route" style={{ zIndex: 390 }}>
@@ -517,8 +542,9 @@ export function MapView({ mode, stops, selectedId, favoriteIds, focus, onSelect,
         <RememberView storageKey={VIEW_KEYS[mode]} />
       </MapContainer>
       <LocateButton
-        onLocated={(lat, lon) => {
-          setUserPos([lat, lon]);
+        onLocated={(pos) => {
+          const { lat, lon } = pos;
+          setUserPos(pos);
           // Bien cerca: con las paradas de bus (o en una ciudad con muchas estaciones) se ve qué hay alrededor.
           setLocFocus({ lat, lon, zoom: mode === 'bus' ? 17 : 16, key: Date.now() });
         }}
