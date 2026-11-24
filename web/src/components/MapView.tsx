@@ -519,7 +519,8 @@ export function MapView({ mode, stops, selectedId, favoriteIds, focus, onSelect,
       <LocateButton
         onLocated={(lat, lon) => {
           setUserPos([lat, lon]);
-          setLocFocus({ lat, lon, zoom: 14, key: Date.now() });
+          // Bien cerca: con las paradas de bus (o en una ciudad con muchas estaciones) se ve qué hay alrededor.
+          setLocFocus({ lat, lon, zoom: mode === 'bus' ? 17 : 16, key: Date.now() });
         }}
       />
     </div>

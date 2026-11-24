@@ -243,7 +243,7 @@ export function StopSearch<T extends SearchStop>({
           <input
             ref={inputRef}
             type="search"
-            placeholder={PLACEHOLDER[transport][narrow ? 1 : 0]}
+            placeholder={leading ? PLACEHOLDER[transport][narrow ? 1 : 0] : 'Buscar estación o nº de tren…'}
             value={query}
             aria-label={LABEL[transport]}
             aria-expanded={mode === 'search' && searchResults.length > 0}

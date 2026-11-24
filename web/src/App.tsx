@@ -28,7 +28,7 @@ import {
 } from './lib/api';
 import { track } from './lib/analytics';
 import { useFavorites } from './lib/favorites';
-import { initialMode, saveMode, type TransportMode } from './lib/mode';
+import { BUS_ENABLED, initialMode, saveMode, type TransportMode } from './lib/mode';
 import { useTripLive, useTripShape } from './lib/useTripLive';
 
 const BASE_TITLE = 'Cercanías en directo · Próximos trenes y retrasos en tiempo real';
@@ -168,7 +168,7 @@ export function App() {
   }, [stops, slugs]);
 
   // Igual con una parada de autobús (/bus/santander/parada/328/).
-  const busFromUrl = useRef(busStopFromPath(location.pathname));
+  const busFromUrl = useRef(BUS_ENABLED ? busStopFromPath(location.pathname) : null);
   useEffect(() => {
     if (!busFromUrl.current || busStops.length === 0) return;
     const stop = busById.get(busStopId(busFromUrl.current.feed, busFromUrl.current.code));
@@ -211,7 +211,8 @@ export function App() {
 
   const bus = mode === 'bus';
   const panelOpen = bus ? !!selectedBus : !!selected;
-  const switcher = <ModeSwitch mode={mode} onChange={changeMode} />;
+  // Sin autobuses (aún solo Santander), no hay píldora: la app es solo de trenes.
+  const switcher = BUS_ENABLED ? <ModeSwitch mode={mode} onChange={changeMode} /> : undefined;
   const showNotice = !!notice && !bus; // los avisos de ahora son de Renfe
 
   return (
