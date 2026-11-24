@@ -79,7 +79,15 @@ export function getArrivals(
       const stuckAtOrigin = vehicleLost && vehicle != null && !leftOrigin(data, st.tripId, vehicle);
 
       const rtStop = rtTrip?.stops.get(stopId);
-      const delaySec = rtTrip ? realtimeDelaySec(data, st.tripId, stopId, base, rtTrip) : null;
+      let delaySec = rtTrip ? realtimeDelaySec(data, st.tripId, stopId, base, rtTrip) : null;
+      // Sigue en su origen después de su hora de salida: lleva al menos ese retraso, aunque
+      // Renfe diga otra cosa (a veces da 0 o nada y, al pasar la hora, el tren desaparecía de
+      // las paradas siguientes sin haber pasado por ellas).
+      const held = vehicleLost ? 0 : heldAtOriginSec(data, st.tripId, base, vehicle, nowMs);
+      const heldAtOrigin = held > (delaySec ?? 0);
+      if (heldAtOrigin) delaySec = held;
+      // Tanto rato sin salir ya no es un retraso fiable: puede no llegar a salir.
+      const stuckAtOriginLong = held >= STUCK_UNCONFIRMED_SEC;
       const estimated = delaySec != null ? scheduled + delaySec * 1000 : scheduled;
 
       let pos = vehicle ? vehiclePosition(data, st.tripId, stopId, st.seq, vehicle) : null;
@@ -102,6 +110,7 @@ export function getArrivals(
         const heard = rtTrip != null || (vehicleAge != null && !vehicleLost);
         unconfirmed = !heard && departsFromOriginBy(data, st.tripId, base) <= nowMs + UNCONFIRMED_AHEAD_MS;
       }
+      if (stuckAtOriginLong) unconfirmed = true;
 
       // Un tren que ya ha pasado tiene hora estimada en el pasado y se descarta aquí, salvo
       // que siga entrando o parado en la estación. Si se perdió, el retraso suele haber ido
@@ -126,8 +135,9 @@ export function getArrivals(
         estimated,
         minutes: minutesUntil(estimated, nowMs),
         delaySec,
-        realtime: rtTrip != null && !rtLost,
+        realtime: !rtLost && !stuckAtOriginLong && (rtTrip != null || heldAtOrigin),
         unconfirmed,
+        ...(stuckAtOriginLong ? { heldAtOriginMin: Math.round(held / 60) } : {}),
         ...(rtLost ? { lastSeenAt: nowMs - rtAge } : {}),
         cancelled: !!rtTrip?.cancelled || !!rtStop?.skipped,
         terminates: trip.lastStopId === stopId,
@@ -156,6 +166,9 @@ const UNCONFIRMED_AHEAD_MS = 5 * 60_000;
  */
 const LOST_GRACE_MS = 10 * 60_000;
 
+/** A partir de este tiempo parado en su origen tras su hora, el tren pasa a "Sin confirmar". */
+const STUCK_UNCONFIRMED_SEC = 25 * 60;
+
 /**
  * ¿Había salido ya de su origen cuando se perdió? Con posición, si estaba más allá de la
  * primera parada; sin ella, si según el horario y su retraso debía haber salido ya.
@@ -181,6 +194,40 @@ export function leftOrigin(data: GtfsData, tripId: string, v: VehicleState): boo
   if (v.status !== 'in_transit') return false;
   const s = data.stops.get(stops[0]);
   return !s || v.lat == null || v.lon == null || distM(s.lat, s.lon, v.lat, v.lon) > PASSED_M;
+}
+
+/**
+ * Segundos que lleva un tren en su parada de origen después de su hora de salida (0 si ya ha
+ * salido, si aún no es la hora o si no se sabe dónde está). Es un mínimo de su retraso.
+ * Medido el 2026-11-23: de 14 trenes parados en origen tras su hora, 6 tenían retraso 0 en el
+ * feed (uno llevaba 21 min); los demás sí sumaban un minuto por minuto.
+ */
+export function heldAtOriginSec(
+  data: GtfsData,
+  tripId: string,
+  base: number,
+  v: VehicleState | undefined,
+  nowMs: number,
+): number {
+  if (!v || data.tripStops.get(tripId)?.[0] !== v.stopId || leftOrigin(data, tripId, v)) return 0;
+  const dep = departsFromOriginBy(data, tripId, base);
+  return dep < nowMs ? Math.round((nowMs - dep) / 1000) : 0;
+}
+
+/**
+ * Lo mismo sin saber de qué día de servicio es la circulación: la de hoy o la de ayer (que pasa
+ * de las 24:00) cuya salida sea la más reciente.
+ */
+export function heldAtOriginNowSec(data: GtfsData, tripId: string, v: VehicleState | undefined, nowMs: number): number {
+  const trip = data.trips.get(tripId);
+  if (!trip || !v || data.tripStops.get(tripId)?.[0] !== v.stopId) return 0;
+  const today = localDate(nowMs);
+  for (const date of [today, addDays(today, -1)]) {
+    if (!data.servicesByDate.get(date)?.has(trip.serviceId)) continue;
+    const base = serviceDayBase(date);
+    if (departsFromOriginBy(data, tripId, base) <= nowMs) return heldAtOriginSec(data, tripId, base, v, nowMs);
+  }
+  return 0;
 }
 
 /** Hora programada de salida del viaje desde su primera parada (epoch ms). */

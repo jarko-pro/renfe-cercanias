@@ -1,5 +1,5 @@
 import type { TripLive } from '@renfe/shared';
-import { leftOrigin, type RealtimeView } from './arrivals.js';
+import { heldAtOriginNowSec, leftOrigin, type RealtimeView } from './arrivals.js';
 import type { GtfsData } from './gtfs/types.js';
 import { BLIP_MS } from './realtime/memory.js';
 import type { TripRealtime } from './realtime/poller.js';
@@ -26,6 +26,8 @@ export function buildTripLive(
   v: VehicleState | undefined,
   rtTrip: TripRealtime | undefined,
   lastSeenAt?: number,
+  /** Mínimo de retraso que se sabe por otro lado (lleva ese tiempo sin salir de su origen). */
+  minDelaySec = 0,
 ): TripLive | null {
   const trip = data.trips.get(tripId);
   if (!trip) return null;
@@ -41,7 +43,7 @@ export function buildTripLive(
     stopName: stopName(v?.stopId),
     nextStopName: stopName(next),
     ...(v?.platform ? { platform: v.platform } : {}),
-    delaySec: rtTrip?.delaySec ?? null,
+    delaySec: minDelaySec > (rtTrip?.delaySec ?? 0) ? minDelaySec : (rtTrip?.delaySec ?? null),
     updatedAt: v?.timestamp ?? null,
     ...(lastSeenAt != null ? { lastSeenAt } : {}),
   };
@@ -59,5 +61,6 @@ export function tripLiveNow(data: GtfsData, tripId: string, realtime: RealtimeVi
   const lost = !liveV && mem?.vehicle && mem.vehicleAt != null && nowMs - mem.vehicleAt > BLIP_MS;
   // Perdido sin salir de su origen: no se da su última posición (puede no llegar a salir).
   if (lost && !leftOrigin(data, tripId, mem.vehicle!)) return buildTripLive(data, tripId, undefined, rt);
-  return buildTripLive(data, tripId, v, rt, lost ? mem.vehicleAt : undefined);
+  const held = lost ? 0 : heldAtOriginNowSec(data, tripId, v, nowMs);
+  return buildTripLive(data, tripId, v, rt, lost ? mem.vehicleAt : undefined, held);
 }

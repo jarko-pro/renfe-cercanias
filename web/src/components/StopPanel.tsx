@@ -264,7 +264,9 @@ function ArrivalRow({ a, now, live, onTrack, compact = false }: RowProps) {
               <span
                 className="badge unconfirmed"
                 title={
-                  lost
+                  a.heldAtOriginMin != null
+                    ? `Lleva ${a.heldAtOriginMin} min parado en su origen sin salir: puede no llegar a salir`
+                    : lost
                     ? `Renfe dejó de dar datos de este tren a las ${formatTime(a.lastSeenAt!)}, antes de salir de su origen: puede no llegar a salir`
                     : 'Renfe no da datos en tiempo real de este tren: puede ir con retraso o estar cancelado'
                 }

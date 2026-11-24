@@ -46,6 +46,8 @@ export interface Arrival {
    * poco ("sin señal"); a true, se perdió hace rato o antes de salir de su origen.
    */
   lastSeenAt?: number;
+  /** Lleva estos minutos parado en su origen tras su hora de salida (va con `unconfirmed`). */
+  heldAtOriginMin?: number;
   cancelled: boolean;
   /** El tren termina su recorrido en esta parada. */
   terminates: boolean;

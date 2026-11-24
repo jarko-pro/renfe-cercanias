@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+﻿import { describe, expect, it } from 'vitest';
 import { getArrivals, minutesUntil } from '../src/arrivals.js';
 import { buildGtfsData } from '../src/gtfs/build.js';
 import type { GtfsSource } from '../src/gtfs/types.js';
@@ -258,6 +258,56 @@ describe('getArrivals', () => {
       const data = await buildGtfsData(source(FILES), TODAY);
       const res = getArrivals(data, withVeh(veh('S3', 'incoming')), 'S2', at(TODAY, 8, 9));
       expect(res.find((a) => a.tripId === 'A')).toBeUndefined();
+    });
+
+    // Caso real (2026-11-23): Renfe da retraso 0 (o nada) a trenes que siguen en su origen tras
+    // su hora; al pasar su hora estimada desaparecían de las paradas siguientes sin haber pasado.
+    describe('parado en su origen después de su hora de salida', () => {
+      const zero: TripRealtime = { delaySec: 0, cancelled: false, stops: new Map([['S2', { delaySec: 0, skipped: false }]]) };
+      const rt = (trip?: TripRealtime) => ({
+        trips: new Map(trip ? [['A', trip]] : []),
+        vehicles: new Map([['A', veh('S1', 'stopped')]]),
+      });
+
+      it('sigue en las paradas siguientes con, como mínimo, el tiempo que lleva sin salir', async () => {
+        const data = await buildGtfsData(source(FILES), TODAY);
+        for (const r of [rt(zero), rt()]) {
+          const a = getArrivals(data, r, 'S2', at(TODAY, 8, 12)).find((x) => x.tripId === 'A');
+          expect(a?.delaySec).toBe(12 * 60);
+          expect(a?.realtime).toBe(true);
+          expect(a?.unconfirmed).toBe(false);
+          expect(a?.minutes).toBe(10);
+        }
+      });
+
+      it('a partir de 25 min sin salir pasa a "Sin confirmar", aunque Renfe dé retraso', async () => {
+        const data = await buildGtfsData(source(FILES), TODAY);
+        const late: TripRealtime = { delaySec: 1500, cancelled: false, stops: new Map([['S2', { delaySec: 1500, skipped: false }]]) };
+        for (const r of [rt(zero), rt(late)]) {
+          const a = getArrivals(data, r, 'S2', at(TODAY, 8, 25)).find((x) => x.tripId === 'A');
+          expect(a?.unconfirmed).toBe(true);
+          expect(a?.realtime).toBe(false);
+          expect(a?.heldAtOriginMin).toBe(25);
+          expect(a?.delaySec).toBe(25 * 60);
+        }
+        const [early] = getArrivals(data, rt(zero), 'S2', at(TODAY, 8, 24));
+        expect(early.unconfirmed).toBe(false);
+        expect(early.heldAtOriginMin).toBeUndefined();
+      });
+
+      it('si Renfe da un retraso mayor, manda el de Renfe', async () => {
+        const data = await buildGtfsData(source(FILES), TODAY);
+        const big: TripRealtime = { delaySec: 900, cancelled: false, stops: new Map([['S2', { delaySec: 900, skipped: false }]]) };
+        const [a] = getArrivals(data, rt(big), 'S2', at(TODAY, 8, 5));
+        expect(a.delaySec).toBe(900);
+      });
+
+      it('no cambia nada antes de su hora de salida ni cuando ya ha salido', async () => {
+        const data = await buildGtfsData(source(FILES), TODAY);
+        expect(getArrivals(data, rt(zero), 'S2', at(TODAY, 7, 58))[0].delaySec).toBe(0);
+        const moving = { trips: new Map([['A', zero]]), vehicles: new Map([['A', veh('S1', 'in_transit', undefined, [40.1, -3.2])]]) };
+        expect(getArrivals(data, moving, 'S2', at(TODAY, 8, 5))[0].delaySec).toBe(0);
+      });
     });
 
     it('en origen no descarta el tren que aún no ha salido', async () => {
