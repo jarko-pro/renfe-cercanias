@@ -67,7 +67,7 @@ La primera vez, el servidor descarga el GTFS de Renfe (~16 MB) en `server/data/`
   - `src/live.ts`, `src/shape.ts`: posición y trazado del tren que se sigue.
   - `src/alerts.ts`: avisos por estación. Renfe no da gravedad ni fecha de fin, así que se deducen del texto.
   - `src/history/`: histórico de retrasos de cada tren en Postgres.
-  - `src/bus/`: autobuses urbanos (solo las redes de `BUS_FEEDS`). Hoy, Santander con los datos abiertos del Ayuntamiento: paradas, líneas y, cada 30 s, los dos próximos buses de cada parada y línea. Como no hay id de viaje, la hora real a la que pasa cada bus se deduce de esas estimaciones (`passes.ts`) y se guarda en otra base de datos (`DATABASE_URL_BUS`).
+  - `src/bus/`: autobuses urbanos (solo las redes de `BUS_FEEDS`). Hoy, Santander con los datos abiertos del Ayuntamiento: paradas, líneas y, cada 30 s, los dos próximos buses de cada parada y línea. Como no hay id de viaje, la hora real a la que pasa cada bus se deduce de esas estimaciones (`passes.ts`) y se guarda en otra base de datos (`DATABASE_URL_BUS`). Madrid (EMT, API de MobilityLabs) no tiene volcado de todas las llegadas: se piden parada a parada cuando alguien abre una, y la respuesta se comparte 25 s (`emt-feed.ts`). Sin histórico.
   - `src/stats.ts`: reenvía las estadísticas de uso a Umami, sin guardar IPs.
 - `web/`: React + Vite + Leaflet.
   - `scripts/station-pages.ts`: tras el build, genera una página estática por estación, el `404.html` y el `sitemap.xml`.
@@ -102,5 +102,5 @@ Algunas cosas que conviene saber de los datos de Renfe:
 ### Publicación
 
 - **Web**: GitHub Pages, en `cercaniasendirecto.com`. Se despliega sola con `.github/workflows/pages.yml` en cada push a `main` que cambie `web/` o `shared/`. Lee la URL del servidor de la variable de repositorio `API_URL`, y el ID de Umami de `UMAMI_ID`.
-- **Autobuses**: se activan en el servidor con `BUS_FEEDS=santander` (sin ella no se lee nada de buses). El histórico de buses va en un segundo proyecto de Supabase (`DATABASE_URL_BUS`); con `BUS_HISTORY_READ_ONLY=1` no se escribe en él (para probar en local).
+- **Autobuses**: se activan en el servidor con `BUS_FEEDS=barcelona,madrid,santander` (sin ella no se lee nada de buses). Madrid necesita además `EMT_CLIENT_ID` y `EMT_PASS_KEY` (cuenta gratuita de MobilityLabs; hay que citar "EMT Madrid MobilityLabs" como fuente). Barcelona necesita `AMB_CLIENT_ID` y `AMB_PASS_KEY` (el app_id y la app_key de developer.tmb.cat; tope propio de 20.000 consultas al día en `server/src/bus/registry.ts`). En la web, los autobuses solo se ven con `VITE_BUS=1`. El histórico de buses va en un segundo proyecto de Supabase (`DATABASE_URL_BUS`); con `BUS_HISTORY_READ_ONLY=1` no se escribe en él (para probar en local).
 - **Servidor**: Render, plan gratuito, definido en `render.yaml`. El plan gratuito se duerme tras 15 min sin uso; para evitarlo, el propio servidor llama a su URL pública cada 10 min (`.github/workflows/keepalive.yml` hace de respaldo). La web guarda la lista de estaciones en el dispositivo y reintenta sola si el servidor está despertando.

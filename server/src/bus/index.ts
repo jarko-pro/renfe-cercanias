@@ -3,6 +3,8 @@ import type { BusArrivalsResponse, BusFeedStatus } from '@renfe/shared';
 import { tzOffsetMs } from '../time.js';
 import type { BusHistory } from './history.js';
 import { createPassDetector, serviceDayOf } from './passes.js';
+import { createEmtFeed } from './emt-feed.js';
+import { createTmbFeed } from './tmb-feed.js';
 import { BUS_REGISTRY, type SantanderConfig } from './registry.js';
 import {
   buildStatic,
@@ -14,7 +16,7 @@ import {
   type SantanderStatic,
 } from './santander.js';
 
-type Log = { info(m: string): void; warn(m: string): void };
+export type Log = { info(m: string): void; warn(m: string): void };
 
 /** Paradas, líneas y recorridos cambian poco: se recargan una vez al día. */
 const STATIC_MAX_AGE_MS = 24 * 3600_000;
@@ -124,7 +126,7 @@ function createSantanderFeed(cfg: SantanderConfig, log: Log, history: BusHistory
 
   return {
     stops: () => (stat ? { json: stopsJson, etag: stopsEtag } : null),
-    arrivals(code: string, now: number): BusArrivalsResponse | null | 'loading' {
+    async arrivals(code: string, now: number): Promise<BusArrivalsResponse | null | 'loading'> {
       if (!stat) return 'loading';
       const stop = stat.stops.get(code);
       if (!stop) return null;
@@ -148,20 +150,48 @@ function createSantanderFeed(cfg: SantanderConfig, log: Log, history: BusHistory
       history: { ...history.status },
       ...(error ? { error } : {}),
     }),
-    stop: () => timer && clearTimeout(timer),
+    stop: () => {
+      if (timer) clearTimeout(timer);
+    },
   };
 }
 
 /** Redes de autobús activas (ids de BUS_FEEDS separados por comas). */
+export interface BusFeed {
+  stops(): { json: string; etag: string } | null;
+  /** null = no existe esa parada; 'loading' = aún no hay paradas; 'unavailable' = la red no responde. */
+  arrivals(code: string, now: number): Promise<BusArrivalsResponse | null | 'loading' | 'unavailable'>;
+  status(): BusFeedStatus;
+  stop(): void;
+}
+
 export function createBus(ids: string[], log: Log, history: BusHistory) {
-  const feeds = new Map<string, ReturnType<typeof createSantanderFeed>>();
+  const feeds = new Map<string, BusFeed>();
   for (const id of ids) {
     const cfg = BUS_REGISTRY[id];
     if (!cfg) {
       log.warn(`BUS_FEEDS: red de autobús desconocida "${id}"`);
       continue;
     }
-    feeds.set(id, createSantanderFeed(cfg, log, history));
+    if (cfg.kind === 'emt-madrid') {
+      const clientId = process.env.EMT_CLIENT_ID;
+      const passKey = process.env.EMT_PASS_KEY;
+      if (!clientId || !passKey) {
+        log.warn(`BUS_FEEDS: "${id}" necesita EMT_CLIENT_ID y EMT_PASS_KEY`);
+        continue;
+      }
+      feeds.set(id, createEmtFeed(cfg, { clientId, passKey }, log));
+    } else if (cfg.kind === 'tmb') {
+      const appId = process.env.AMB_CLIENT_ID;
+      const appKey = process.env.AMB_PASS_KEY;
+      if (!appId || !appKey) {
+        log.warn(`BUS_FEEDS: "${id}" necesita AMB_CLIENT_ID y AMB_PASS_KEY (app_id y app_key de TMB)`);
+        continue;
+      }
+      feeds.set(id, createTmbFeed(cfg, { appId, appKey }, log));
+    } else {
+      feeds.set(id, createSantanderFeed(cfg, log, history));
+    }
   }
   if (feeds.size) log.info(`Buses activos: ${[...feeds.keys()].join(', ')}`);
   return {

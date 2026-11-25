@@ -14,6 +14,25 @@ export interface BusFeedInfo {
 
 export const BUS_FEEDS: BusFeedInfo[] = [
   {
+    id: 'madrid',
+    city: 'Madrid',
+    operator: 'EMT',
+    center: [40.4168, -3.7038],
+    zoom: 15,
+    // MobilityLabs pide citarla como fuente de los datos.
+    source: 'EMT Madrid MobilityLabs',
+    sourceUrl: 'https://mobilitylabs.emtmadrid.es',
+  },
+  {
+    id: 'barcelona',
+    city: 'Barcelona',
+    operator: 'TMB',
+    center: [41.3874, 2.1686],
+    zoom: 15,
+    source: 'TMB (Transports Metropolitans de Barcelona)',
+    sourceUrl: 'https://developer.tmb.cat',
+  },
+  {
     id: 'santander',
     city: 'Santander',
     operator: 'TUS',

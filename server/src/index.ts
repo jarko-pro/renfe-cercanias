@@ -312,8 +312,10 @@ app.get<{ Params: { feed: string } }>('/api/bus/:feed/stops', async (req, reply)
 app.get<{ Params: { feed: string; code: string } }>('/api/bus/:feed/stops/:code/arrivals', async (req, reply) => {
   const feed = bus.feed(req.params.feed);
   if (!feed) return reply.code(404).send({ error: 'Red de autobús no disponible' });
-  const res = feed.arrivals(req.params.code, Date.now());
+  const res = await feed.arrivals(req.params.code, Date.now());
   if (res === 'loading') return reply.code(503).send({ error: 'Cargando paradas, prueba en unos segundos' });
+  // La red de autobuses no responde. No es un 502-504: la web lo tomaría por el servidor despertando.
+  if (res === 'unavailable') return reply.code(500).send({ error: 'La red de autobuses no responde ahora' });
   if (!res) return reply.code(404).send({ error: 'Parada no encontrada' });
   reply.header('Cache-Control', 'no-store');
   return res;

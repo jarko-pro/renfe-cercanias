@@ -1519,3 +1519,43 @@ button.arrival.following.dx {
     opacity: 0.35;
   }
 }
+
+/* ---------- Autobús seguido (EMT Madrid da su GPS) ----------
+   Oscuro y con un aro que late: así no se confunde con las paradas, que son azules. */
+.bus-marker span {
+  position: absolute;
+  left: 0;
+  top: 0;
+  transform: translate(-50%, -50%);
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 9px 3px 7px;
+  border-radius: 999px;
+  background: #1c1c1e;
+  color: #fff;
+  border: 2.5px solid #fff;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.5);
+  font: 700 13px/17px system-ui, sans-serif;
+  white-space: nowrap;
+}
+.bus-marker span::after {
+  content: '';
+  position: absolute;
+  top: -2.5px;
+  left: -2.5px;
+  right: -2.5px;
+  bottom: -2.5px;
+  border-radius: 999px;
+  border: 3px solid #1c1c1e;
+  animation: train-ring 1.8s ease-out infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .bus-marker span::after {
+    animation: none;
+  }
+}
+button.arrival.bus-row.following {
+  box-shadow: inset 4px 0 0 #1c1c1e;
+  background: var(--surface-2);
+}

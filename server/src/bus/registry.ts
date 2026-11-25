@@ -18,9 +18,48 @@ export interface SantanderConfig {
   defaultColor: [string, string];
 }
 
-export type BusFeedConfig = SantanderConfig;
+/**
+ * EMT de Madrid (MobilityLabs): API con credenciales (EMT_CLIENT_ID y EMT_PASS_KEY). Las
+ * llegadas se piden parada a parada cuando alguien abre una, y se comparten unos segundos.
+ */
+export interface EmtConfig {
+  id: string;
+  kind: 'emt-madrid';
+  base: string;
+  /** Cuánto se reutiliza la respuesta de una parada antes de volver a pedirla. */
+  cacheMs: number;
+}
+
+/**
+ * TMB de Barcelona (api.tmb.cat): clave de developer.tmb.cat (AMB_CLIENT_ID = app_id y
+ * AMB_PASS_KEY = app_key). Como en Madrid, las llegadas se piden parada a parada.
+ */
+export interface TmbConfig {
+  id: string;
+  kind: 'tmb';
+  base: string;
+  cacheMs: number;
+  /** Tope propio de consultas al día (TMB no publica el suyo). */
+  dailyLimit: number;
+}
+
+export type BusFeedConfig = SantanderConfig | EmtConfig | TmbConfig;
 
 export const BUS_REGISTRY: Record<string, BusFeedConfig> = {
+  madrid: {
+    id: 'madrid',
+    kind: 'emt-madrid',
+    base: 'https://openapi.emtmadrid.es',
+    // La web refresca cada 30 s: con 25 s, dos personas en la misma parada gastan una sola consulta.
+    cacheMs: 25_000,
+  },
+  barcelona: {
+    id: 'barcelona',
+    kind: 'tmb',
+    base: 'https://api.tmb.cat',
+    cacheMs: 25_000,
+    dailyLimit: 20_000,
+  },
   santander: {
     id: 'santander',
     kind: 'santander-json',

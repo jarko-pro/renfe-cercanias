@@ -3,9 +3,11 @@ import { parseBusStopId } from '@renfe/shared';
 import { describe, expect, it } from 'vitest';
 import type { Db } from '../src/history/db.js';
 import { migrateBus, upsertPasses } from '../src/bus/db.js';
+import { buildEmtStatic, emtArrivals, titleCase } from '../src/bus/emt.js';
 import { toRows } from '../src/bus/history.js';
+import { dailyQuota } from '../src/bus/ondemand.js';
 import { createPassDetector, serviceDayOf, type Pass } from '../src/bus/passes.js';
-import { BUS_REGISTRY } from '../src/bus/registry.js';
+import { BUS_REGISTRY, type SantanderConfig } from '../src/bus/registry.js';
 import {
   buildStatic,
   parseEstimates,
@@ -14,9 +16,10 @@ import {
   type Estimate,
   type Resource,
 } from '../src/bus/santander.js';
+import { buildTmbStatic, tmbArrivals } from '../src/bus/tmb.js';
 import { serviceDayBase } from '../src/time.js';
 
-const cfg = BUS_REGISTRY.santander;
+const cfg = BUS_REGISTRY.santander as SantanderConfig;
 
 // Recortes de los datasets reales del Ayuntamiento de Santander (24-11-2026).
 const STOPS: Resource[] = [
@@ -191,5 +194,139 @@ describe('bus_passes', () => {
       { stop: '201', times: [29000, 30000, 32000] },
       { stop: '328', times: [31000] },
     ]);
+  });
+});
+
+describe('EMT Madrid', () => {
+  // Recortes de la API de MobilityLabs (26-11-2026).
+  const LINES = [
+    { line: '005', label: '5', nameA: 'SOL SEVILLA', nameB: 'CHAMARTIN', color: '0072ce' },
+    { line: '363', label: 'C03', nameA: 'PUERTA DE TOLEDO', nameB: 'ARGÜELLES', color: '0072ce' },
+    { line: '501', label: 'N1', nameA: 'CIBELES', nameB: 'SANCHINARRO', color: '050505', forecolor: 'f2fb02' },
+    { line: '161', label: '161', nameA: 'MONCLOA', nameB: 'ARAVACA SUR', color: '0072ce' },
+  ];
+  const STOPS = [
+    { node: '72', name: 'Cibeles-Casa de América', geometry: { coordinates: [-3.6929, 40.4189] as [number, number] }, lines: ['005/1', '363/2', '501/1'] },
+    { node: '1', name: 'Avenida Valdemarín-Blanca de Castilla', geometry: { coordinates: [-3.7829, 40.4700] as [number, number] }, lines: ['161/1'] },
+    // Línea que hoy no existe: la parada no se muestra.
+    { node: '9', name: 'Sin servicio', geometry: { coordinates: [-3.7, 40.4] as [number, number] }, lines: ['999/1'] },
+  ];
+  const stat = buildEmtStatic('madrid', STOPS, LINES, 0);
+
+  it('lee paradas y líneas con su etiqueta pública y sus colores', () => {
+    expect([...stat.stops.keys()]).toEqual(['72', '1']);
+    const cibeles = stat.stops.get('72')!;
+    expect(cibeles.id).toBe('madrid:72');
+    expect(parseBusStopId(cibeles.id)).toEqual({ feed: 'madrid', code: '72' });
+    expect(cibeles.lat).toBeCloseTo(40.4189);
+    expect(cibeles.lines.map((l) => l.name)).toEqual(['5', 'C03', 'N1']);
+    expect(stat.lines.get('N1')).toEqual({ name: 'N1', color: '050505', textColor: 'F2FB02' });
+    // Varias direcciones: sin "hacia"; una sola (sentido 1 = hacia la cabecera B): con él.
+    expect(cibeles.towards).toBeUndefined();
+    expect(stat.stops.get('1')!.towards).toBe('Aravaca Sur');
+  });
+
+  it('agrupa las llegadas por línea y destino, las dos primeras', () => {
+    const at = 1_000_000;
+    const { lines, idle } = emtArrivals(
+      stat,
+      '72',
+      [
+        { line: '5', destination: 'CHAMARTIN', estimateArrive: 349, DistanceBus: 704 },
+        { line: 'C03', destination: 'ARGÜELLES', estimateArrive: 838, DistanceBus: 2078 },
+        { line: '5', destination: 'CHAMARTIN', estimateArrive: 1200, DistanceBus: 3000 },
+        { line: '5', destination: 'CHAMARTIN', estimateArrive: 83, DistanceBus: 176, bus: 2294, geometry: { coordinates: [-3.6931, 40.4143] } },
+        // Sin estimación real: fuera.
+        { line: 'C03', destination: 'ARGÜELLES', estimateArrive: 999999 },
+      ],
+      at,
+      at + 30_000,
+    );
+    expect(lines.map((g) => `${g.line.name} ${g.headsign}`)).toEqual(['5 Chamartin', 'C03 Argüelles']);
+    expect(lines[0].next.map((n) => n.estimated)).toEqual([at + 83_000, at + 349_000]);
+    expect(lines[0].next[0]).toMatchObject({ minutes: 1, distanceM: 176, vehicle: { id: '2294', lat: 40.4143, lon: -3.6931 } });
+    expect(lines[0].next[1].vehicle).toBeUndefined();
+    expect(idle.map((l) => l.name)).toEqual(['N1']);
+  });
+
+  it('pone en minúsculas los destinos de la EMT', () => {
+    expect(titleCase('PUERTA DE TOLEDO')).toBe('Puerta de Toledo');
+    expect(titleCase('PIO XII')).toBe('Pio XII');
+    expect(titleCase('LAS ROSAS-AV. GUADALAJARA')).toBe('Las Rosas-Av. Guadalajara');
+  });
+});
+
+describe('TMB Barcelona', () => {
+  // Recortes de api.tmb.cat (25-11-2026).
+  const pt = (lon: number, lat: number) => ({ coordinates: [lon, lat] as [number, number] });
+  const LINES = [
+    { properties: { CODI_LINIA: 244, NOM_LINIA: 'X2', COLOR_LINIA: 'da291c', COLOR_TEXT_LINIA: 'FFFFFF' } },
+    { properties: { CODI_LINIA: 212, NOM_LINIA: 'H12', COLOR_LINIA: '003888', COLOR_TEXT_LINIA: 'FFFFFF' } },
+    { properties: { CODI_LINIA: 207, NOM_LINIA: 'V7', COLOR_LINIA: '6BB023', COLOR_TEXT_LINIA: 'FFFFFF' } },
+  ];
+  const STOPS = [
+    { geometry: pt(2.1479, 41.3743), properties: { CODI_PARADA: 108, NOM_PARADA: 'Pl Espanya - FGC' } },
+    { geometry: pt(2.12, 41.38), properties: { CODI_PARADA: 622, NOM_PARADA: 'Av Diagonal - Numància' } },
+    // Sin líneas: no se muestra.
+    { geometry: pt(2.1, 41.4), properties: { CODI_PARADA: 9999, NOM_PARADA: 'Sin servicio' } },
+  ];
+  const LINE_STOPS = [
+    { properties: { CODI_PARADA: 108, CODI_LINIA: 244, DESTI_SENTIT: 'Prat' } },
+    { properties: { CODI_PARADA: 108, CODI_LINIA: 212, DESTI_SENTIT: 'Gornal' } },
+    { properties: { CODI_PARADA: 108, CODI_LINIA: 207, DESTI_SENTIT: 'Pl. Espanya' } },
+    { properties: { CODI_PARADA: 622, CODI_LINIA: 207, DESTI_SENTIT: 'Pl. Espanya' } },
+  ];
+  const stat = buildTmbStatic('barcelona', STOPS, LINES, LINE_STOPS, 0);
+
+  it('lee paradas, sus líneas y sus colores', () => {
+    expect([...stat.stops.keys()]).toEqual(['108', '622']);
+    const espanya = stat.stops.get('108')!;
+    expect(espanya.id).toBe('barcelona:108');
+    expect(espanya.lat).toBeCloseTo(41.3743);
+    expect(espanya.lines.map((l) => l.name)).toEqual(['H12', 'V7', 'X2']);
+    expect(espanya.towards).toBeUndefined();
+    expect(stat.stops.get('622')!.towards).toBe('Pl. Espanya');
+    expect(stat.lines.get('X2')).toEqual({ name: 'X2', color: 'DA291C', textColor: 'FFFFFF' });
+  });
+
+  it('agrupa las llegadas (horas absolutas), quita la línea del destino y acepta las del AMB', () => {
+    const now = 1_795_605_400_000;
+    const { lines, idle } = tmbArrivals(
+      stat,
+      '108',
+      [
+        {
+          transit_namespace: 'bus',
+          nom_linia: 'X2',
+          desti_trajecte: 'X2-Prat Xpres (Av. Remolar)',
+          propers_busos: [
+            { temps_arribada: now + 900_000, id_bus: 4656 },
+            { temps_arribada: now + 45_000, id_bus: 4655 },
+            { temps_arribada: now + 1_800_000 },
+          ],
+        },
+        { transit_namespace: 'amb', nom_linia: 'L70', desti_trajecte: 'St. Boi L.', propers_busos: [{ temps_arribada: now + 300_000 }] },
+        // Ya pasó hace rato: fuera.
+        { transit_namespace: 'bus', nom_linia: 'H12', desti_trajecte: 'Gornal', propers_busos: [{ temps_arribada: now - 120_000 }] },
+      ],
+      now,
+      now,
+    );
+    expect(lines.map((g) => `${g.line.name} ${g.headsign}`)).toEqual(['X2 Prat Xpres (Av. Remolar)', 'L70 St. Boi L.']);
+    expect(lines[0].next.map((n) => n.minutes)).toEqual([1, 15]);
+    expect(lines[1].line.color).toBe('5E5E5E');
+    expect(idle.map((l) => l.name)).toEqual(['H12', 'V7']);
+  });
+});
+
+describe('Tope diario de consultas', () => {
+  it('corta al llegar al tope y vuelve a empezar al día siguiente', () => {
+    const q = dailyQuota(2);
+    const day1 = Date.UTC(2026, 10, 25, 12);
+    q.take(day1);
+    q.take(day1);
+    expect(() => q.take(day1)).toThrow(/límite/);
+    q.take(day1 + 24 * 3600_000);
+    expect(q.count).toBe(1);
   });
 });

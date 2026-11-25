@@ -3,6 +3,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { ApiError, fetchBusArrivals, isAbort } from '../lib/api';
 import { formatTime } from '../lib/text';
 import { LineChip } from './LineChip';
+import type { BusVehicle } from './MapView';
 
 const REFRESH_MS = 30_000;
 const RETRY_MS = 4_000;
@@ -17,7 +18,22 @@ interface Props {
   isFavorite: boolean;
   onToggleFavorite: () => void;
   onClose: () => void;
+  /** Autobuses que vienen y de los que se sabe dónde están (para pintarlos en el mapa). */
+  onVehicles: (v: BusVehicle[]) => void;
+  /** Tocar una fila: ver ese autobús en el mapa. */
+  onPickVehicle: (v: BusVehicle) => void;
+  /** Autobús que se está siguiendo en el mapa. */
+  followingId: string | null;
 }
+
+const PIN = (
+  <svg className="live-pin" viewBox="0 0 24 24" width="15" height="15" aria-label="Se puede ver en el mapa">
+    <path
+      fill="currentColor"
+      d="M12 2a7 7 0 0 0-7 7c0 5.2 7 13 7 13s7-7.8 7-13a7 7 0 0 0-7-7Zm0 9.5a2.5 2.5 0 1 1 0-5 2.5 2.5 0 0 1 0 5Z"
+    />
+  </svg>
+);
 
 /** 0 = llegando (a menos de 30 s); si no, minutos redondeados. Mismo criterio que en los trenes. */
 function minutesUntil(estimatedMs: number, nowMs: number): number {
@@ -40,35 +56,70 @@ function distanceText(m: number): string {
   return `a ${(m / 1000).toFixed(1).replace('.', ',')} km`;
 }
 
-function BusRow({ g, now }: { g: BusLineArrivals; now: number }) {
+function BusRow({
+  g,
+  now,
+  onPick,
+  followingId,
+}: {
+  g: BusLineArrivals;
+  now: number;
+  onPick: (v: BusVehicle) => void;
+  followingId: string | null;
+}) {
   const [first, second] = g.next;
   const minutes = minutesUntil(first.estimated, now);
   const sub = [
     first.distanceM != null && minutes > 0 ? distanceText(first.distanceM) : null,
     second ? `siguiente en ${minutesUntil(second.estimated, now)} min` : null,
   ].filter(Boolean);
+  // Se sigue el primero que viene; si el seguido es el de detrás, la fila también lo marca.
+  const followedEta = g.next.find((n) => n.vehicle && n.vehicle.id === followingId);
+  const v = followedEta?.vehicle ?? first.vehicle;
+  const following = !!followedEta;
+  // Dentro de un <button> solo vale contenido "en línea": spans con display por CSS.
   return (
-    <li className="arrival bus-row">
-      <LineChip line={g.line} />
-      <span className="arrival-main">
-        <span className="headsign">{g.headsign}</span>
-        {sub.length > 0 && <span className="arrival-sub">{sub.join(' · ')}</span>}
-      </span>
-      <span className="eta">
-        {minutes === 0 ? (
-          <span className="now">Llegando</span>
-        ) : (
-          <>
-            <strong>{minutes}</strong>
-            <span>min</span>
-          </>
-        )}
-      </span>
+    <li className="arrival-item">
+      <button
+        type="button"
+        className={`arrival bus-row${following ? ' following' : ''}`}
+        disabled={!v}
+        aria-pressed={following}
+        title={following ? 'Dejar de seguir este autobús' : v ? 'Ver este autobús en el mapa' : undefined}
+        onClick={() => v && onPick({ ...v, line: g.line, headsign: g.headsign })}
+      >
+        <LineChip line={g.line} />
+        <span className="arrival-main">
+          <span className="headsign-line">
+            <span className="headsign">{g.headsign}</span>
+            {v && PIN}
+          </span>
+          {sub.length > 0 && <span className="arrival-sub">{sub.join(' · ')}</span>}
+        </span>
+        <span className="eta">
+          {minutes === 0 ? (
+            <span className="now">Llegando</span>
+          ) : (
+            <>
+              <strong>{minutes}</strong>
+              <span>min</span>
+            </>
+          )}
+        </span>
+      </button>
     </li>
   );
 }
 
-export function BusStopPanel({ stop, isFavorite, onToggleFavorite, onClose }: Props) {
+export function BusStopPanel({
+  stop,
+  isFavorite,
+  onToggleFavorite,
+  onClose,
+  onVehicles,
+  onPickVehicle,
+  followingId,
+}: Props) {
   const [data, setData] = useState<BusArrivalsResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [receivedAt, setReceivedAt] = useState(0);
@@ -132,13 +183,29 @@ export function BusStopPanel({ stop, isFavorite, onToggleFavorite, onClose }: Pr
   );
   const idle = data?.idle ?? [];
 
+  // Los autobuses que vienen, para el mapa. Solo se avisa cuando cambian (no en cada tic del reloj).
+  const vehicles = useMemo(
+    () =>
+      lines.flatMap((g) =>
+        g.next.flatMap((n) => (n.vehicle ? [{ ...n.vehicle, line: g.line, headsign: g.headsign }] : [])),
+      ),
+    [lines],
+  );
+  const vehiclesKey = vehicles.map((v) => `${v.id}@${v.lat},${v.lon}`).join('|');
+  useEffect(() => {
+    onVehicles(vehicles);
+  }, [vehiclesKey]);
+  useEffect(() => () => onVehicles([]), [onVehicles]);
+
   return (
     <section className="panel bus-panel" aria-label={`Próximos autobuses en ${stop.name}`}>
       <header className="panel-header">
         <div className="panel-title">
           <h2>{stop.name}</h2>
           <div className="panel-meta">
-            <span>{[`Parada ${stop.code}`, stop.towards && `hacia ${stop.towards}`, feed?.city].filter(Boolean).join(' · ')}</span>
+            <span>
+              {[`Parada ${stop.code}`, stop.towards && `hacia ${stop.towards}`, feed?.city].filter(Boolean).join(' · ')}
+            </span>
           </div>
         </div>
         <button
@@ -168,11 +235,19 @@ export function BusStopPanel({ stop, isFavorite, onToggleFavorite, onClose }: Pr
           </p>
         )}
         {error && !data && !waking && !loading && <p className="placeholder error">{error} · reintentando…</p>}
-        {data && lines.length === 0 && <p className="placeholder">Ahora mismo no viene ningún autobús a esta parada.</p>}
+        {data && lines.length === 0 && (
+          <p className="placeholder">Ahora mismo no viene ningún autobús a esta parada.</p>
+        )}
         {data && lines.length > 0 && (
           <ul className={`arrivals${stale ? ' stale' : ''}`}>
             {lines.map((g) => (
-              <BusRow key={`${g.line.name}|${g.headsign}`} g={g} now={now} />
+              <BusRow
+                key={`${g.line.name}|${g.headsign}`}
+                g={g}
+                now={now}
+                onPick={onPickVehicle}
+                followingId={followingId}
+              />
             ))}
           </ul>
         )}

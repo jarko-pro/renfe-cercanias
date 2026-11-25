@@ -160,6 +160,8 @@ export interface BusFeedStatus {
   /** Pasos de bus por parada detectados hoy (la base de la puntualidad). */
   passesToday: number;
   history: { enabled: boolean; pending: number; saved: number; lastError: string | null };
+  /** Redes que se consultan parada a parada (EMT Madrid): consultas hechas hoy a su API. */
+  requestsToday?: number;
   error?: string;
 }
 
@@ -187,6 +189,8 @@ export interface BusEta {
   minutes: number;
   /** Distancia en metros por la ruta, si la red la da. */
   distanceM?: number;
+  /** Dónde está ahora el autobús (GPS), si la red lo da (EMT Madrid). */
+  vehicle?: { id: string; lat: number; lon: number };
 }
 
 /** Una línea en un sentido, con sus próximos buses en la parada (como en las marquesinas). */

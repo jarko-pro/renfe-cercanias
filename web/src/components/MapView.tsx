@@ -1,4 +1,4 @@
-import { BUS_FEEDS, type Line } from '@renfe/shared';
+import { BUS_FEEDS, parseBusStopId, type Line } from '@renfe/shared';
 import L from 'leaflet';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Circle, CircleMarker, MapContainer, Marker, Pane, Polyline, TileLayer, useMap, useMapEvents } from 'react-leaflet';
@@ -12,6 +12,15 @@ export interface MapStop {
   lat: number;
   lon: number;
   lines: Line[];
+}
+
+/** Un autobús que viene hacia la parada abierta, donde está ahora. */
+export interface BusVehicle {
+  id: string;
+  lat: number;
+  lon: number;
+  line: Line;
+  headsign: string;
 }
 
 export interface TrainPosition {
@@ -36,6 +45,10 @@ interface Props {
   train: TrainPosition | null;
   /** Trazado del tren seguido, de origen a destino. */
   route: { path: [number, number][]; color: string } | null;
+  /** Autobuses que vienen a la parada abierta. */
+  buses?: BusVehicle[];
+  /** Autobús elegido en el panel: se encuadra con la parada (cambia `key` para repetir). */
+  busFocus?: { vehicle: BusVehicle; key: number } | null;
 }
 
 const SPAIN: [number, number] = [40.2, -3.7];
@@ -43,8 +56,14 @@ const SPAIN: [number, number] = [40.2, -3.7];
 const VIEW_KEYS: Record<TransportMode, string> = { tren: 'renfe:view:v1', bus: 'renfe:view:bus:v1' };
 /** En modo bus, por debajo de este zoom se ve una burbuja por ciudad en vez de sus paradas. */
 const BUS_MIN_ZOOM = 12;
-/** Todas las paradas de bus del mismo color: tienen muchas líneas y el color de una confundiría. */
-const BUS_COLOR = '#0b6bcb';
+/** Más paradas que esto en pantalla (Madrid entera) irían lentas en el móvil: se ve la burbuja. */
+const BUS_MAX_VISIBLE = 1200;
+/**
+ * Todas las paradas de bus del mismo color: tienen muchas líneas y el color de una confundiría.
+ * Verde: el azul se confundía con otros puntos del mapa (tu ubicación, el metro). Contraste
+ * WCAG ≥ 3:1 (gráficos) con todo lo que hay debajo: fondo 4,5, parques 4,0, calles 3,8, edificios 3,4.
+ */
+const BUS_COLOR = '#1e7d32';
 
 /** Última vista del mapa guardada en el dispositivo; si no hay, España entera (o la única ciudad con buses). */
 function initialView(mode: TransportMode): { center: [number, number]; zoom: number } {
@@ -133,6 +152,81 @@ function TrainMarker({ train }: { train: TrainPosition }) {
   return (
     <Marker ref={ref} position={shown.current} icon={icon} keyboard={false} interactive={false} zIndexOffset={1000} />
   );
+}
+
+/**
+ * Autobús seguido: una pastilla oscura con el número de su línea. Como el tren, entre
+ * posiciones (cada ~30 s) se desliza en vez de saltar.
+ */
+function BusMarker({ bus }: { bus: BusVehicle }) {
+  const ref = useRef<L.Marker>(null);
+  const shown = useRef<[number, number]>([bus.lat, bus.lon]);
+  const icon = useMemo(() => {
+    const name = bus.line.name.replace(/[<>&"]/g, '');
+    // Pastilla oscura con el icono de bus y el número de línea.
+    return L.divIcon({
+      className: 'bus-marker',
+      html: `<span><svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true"><path fill="currentColor" d="${BUS_PATH}"/></svg>${name}</span>`,
+      iconSize: [0, 0],
+      iconAnchor: [0, 0],
+    });
+  }, [bus.line]);
+
+  useEffect(() => {
+    const marker = ref.current;
+    if (!marker) return;
+    const [fromLat, fromLon] = shown.current;
+    const { lat, lon } = bus;
+    if (fromLat === lat && fromLon === lon) return;
+    const t0 = performance.now();
+    let frame = 0;
+    const step = (t: number) => {
+      const k = Math.min(1, (t - t0) / GLIDE_MS);
+      const e = k * (2 - k);
+      shown.current = [fromLat + (lat - fromLat) * e, fromLon + (lon - fromLon) * e];
+      marker.setLatLng(shown.current);
+      if (k < 1) frame = requestAnimationFrame(step);
+    };
+    frame = requestAnimationFrame(step);
+    return () => cancelAnimationFrame(frame);
+  }, [bus.lat, bus.lon]);
+
+  return (
+    <Marker
+      ref={ref}
+      position={shown.current}
+      icon={icon}
+      keyboard={false}
+      interactive={false}
+      zIndexOffset={1000}
+    />
+  );
+}
+
+/** Al tocar un autobús en el panel, encuadra la parada y ese autobús. */
+function FitBus({ focus, stop }: { focus: Props['busFocus']; stop: MapStop | undefined }) {
+  const map = useMap();
+  useEffect(() => {
+    if (!focus || !stop) return;
+    const { lat, lon } = focus.vehicle;
+    // Deja libre lo que tapa el panel: lo de abajo en el móvil (mide lo que ocupa), la izquierda en escritorio.
+    const mobile = window.innerWidth <= 640;
+    const panelTop = document.querySelector('.bus-panel')?.getBoundingClientRect().top ?? window.innerHeight * 0.45;
+    const below = Math.max(120, Math.round(window.innerHeight - panelTop + 40));
+    map.flyToBounds(
+      [
+        [stop.lat, stop.lon],
+        [lat, lon],
+      ],
+      {
+        paddingTopLeft: mobile ? [40, 90] : [420, 40],
+        paddingBottomRight: mobile ? [40, below] : [40, 40],
+        maxZoom: 16,
+        duration: 0.8,
+      },
+    );
+  }, [focus?.key]);
+  return null;
 }
 
 /** Tramo del trazado que le queda al tren: desde el punto más cercano a él hasta el destino. */
@@ -374,6 +468,20 @@ function BusLayer({
     [stops, view],
   );
 
+  if (view.zoom >= BUS_MIN_ZOOM && visible.length > BUS_MAX_VISIBLE) {
+    // Una sola burbuja en el centro de lo que se ve; al tocarla, se acerca ahí mismo.
+    const center = map.getCenter();
+    const feed = parseBusStopId(visible[Math.floor(visible.length / 2)].id)?.feed ?? '';
+    return (
+      <Marker
+        position={center}
+        icon={icons.get(feed) ?? icons.values().next().value!}
+        keyboard={false}
+        eventHandlers={{ click: () => map.flyTo(center, 15, { duration: 0.8 }) }}
+      />
+    );
+  }
+
   if (view.zoom < BUS_MIN_ZOOM) {
     return (
       <>
@@ -496,7 +604,7 @@ const ATTRIBUTION: Record<TransportMode, string> = {
   bus: `Datos: ${BUS_FEEDS.map((f) => `<a href="${f.sourceUrl}" target="_blank" rel="noopener">${f.source}</a>`).join(', ')} · ${OSM}`,
 };
 
-export function MapView({ mode, stops, selectedId, favoriteIds, focus, onSelect, train, route }: Props) {
+export function MapView({ mode, stops, selectedId, favoriteIds, focus, onSelect, train, route, buses, busFocus }: Props) {
   const selectedStop = useMemo(() => stops.find((s) => s.id === selectedId), [stops, selectedId]);
   const [userPos, setUserPos] = useState<UserPosition | null>(null);
   const [locFocus, setLocFocus] = useState<Props['focus']>(null);
@@ -537,6 +645,10 @@ export function MapView({ mode, stops, selectedId, favoriteIds, focus, onSelect,
           </Pane>
         )}
         {train && <TrainMarker key={train.tripId} train={train} />}
+        {buses?.map((b) => (
+          <BusMarker key={b.id} bus={b} />
+        ))}
+        <FitBus focus={busFocus ?? null} stop={selectedStop} />
         {mode === 'tren' && <StopHits stops={stops} onSelect={onSelect} />}
         <FitTrain train={train} stop={selectedStop} />
         <FlyTo focus={focus} />

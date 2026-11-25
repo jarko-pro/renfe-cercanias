@@ -9,11 +9,11 @@ import {
   stopPath,
   stopSlugs,
 } from '@renfe/shared';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { BusStopPanel } from './components/BusStopPanel';
 import { InstallHint } from './components/InstallHint';
 import { NoticeCard, useNotice } from './components/NoticeCard';
-import { MapView } from './components/MapView';
+import { MapView, type BusVehicle } from './components/MapView';
 import { ModeSwitch } from './components/ModeSwitch';
 import { StopPanel } from './components/StopPanel';
 import { StopSearch } from './components/StopSearch';
@@ -49,6 +49,18 @@ export function App() {
   const [selected, setSelected] = useState<Stop | null>(null);
   const [selectedBus, setSelectedBus] = useState<BusStop | null>(null);
   const { notice, close: closeNotice } = useNotice();
+  // Autobuses que vienen a la parada abierta, y el que se sigue (tocado en el panel; otra vez, se deja).
+  const [buses, setBuses] = useState<BusVehicle[]>([]);
+  const [busFocus, setBusFocus] = useState<{ vehicle: BusVehicle; key: number } | null>(null);
+  const pickBus = useCallback(
+    (vehicle: BusVehicle) => setBusFocus((f) => (f?.vehicle.id === vehicle.id ? null : { vehicle, key: Date.now() })),
+    [],
+  );
+  // Posición al día del bus seguido; si ya no viene (ha pasado por la parada), se deja de seguir.
+  const followed = busFocus ? buses.find((b) => b.id === busFocus.vehicle.id) : undefined;
+  useEffect(() => {
+    if (busFocus && buses.length > 0 && !followed) setBusFocus(null);
+  }, [busFocus, buses, followed]);
   const [focus, setFocus] = useState<{ lat: number; lon: number; key: number } | null>(null);
   const favorites = useFavorites();
   // Tren que se sigue en el mapa (solo uno, y solo mientras el panel de su estación está abierto).
@@ -87,13 +99,21 @@ export function App() {
     let cancelled = false;
     let retry: ReturnType<typeof setTimeout>;
     const load = () =>
-      Promise.all(BUS_FEEDS.map((f) => fetchBusStops(f.id)))
-        .then((lists) => {
+      // Cada red por su cuenta: si una falla (o no está activa en el servidor), salen las demás.
+      Promise.allSettled(BUS_FEEDS.map((f) => fetchBusStops(f.id)))
+        .then((results) => {
           if (cancelled) return;
-          const all = lists.flat();
+          const ok = results.flatMap((r) => (r.status === 'fulfilled' ? [r.value] : []));
+          if (ok.length === 0) throw (results[0] as PromiseRejectedResult).reason;
+          const all = ok.flat();
           setBusStops(all);
           setBusError(null);
           writeCachedBusStops(all);
+          // Una red que aún está cargando (o el servidor despertando) se vuelve a pedir.
+          const pending = results.some(
+            (r) => r.status === 'rejected' && (!(r.reason instanceof ApiError) || r.reason.unavailable),
+          );
+          if (pending) retry = setTimeout(load, 5000);
         })
         .catch((e: Error) => {
           if (cancelled) return;
@@ -149,6 +169,19 @@ export function App() {
     setSelected(s);
     if (fly) setFocus({ lat: s.lat, lon: s.lon, key: Date.now() });
   };
+
+  // Al cambiar de parada (o cerrarla), el autobús elegido deja de estarlo.
+  useEffect(() => setBusFocus(null), [selectedBus?.id]);
+
+  // Siguiendo un bus, el mapa solo enseña las paradas de su línea (y la abierta).
+  const followedLine = followed?.line.name;
+  const mapBusStops = useMemo(() => {
+    if (!followedLine || !selectedBus) return busStops;
+    return busStops.filter(
+      (s) =>
+        s.id === selectedBus.id || (s.feed === selectedBus.feed && s.lines.some((l) => l.name === followedLine)),
+    );
+  }, [busStops, followedLine, selectedBus]);
 
   const selectBus = (s: BusStop, fly: boolean, from?: string) => {
     if (s.id !== selectedBus?.id) {
@@ -221,7 +254,7 @@ export function App() {
         // Cada modo tiene su propio mapa (y su propia vista guardada).
         key={mode}
         mode={mode}
-        stops={bus ? busStops : stops}
+        stops={bus ? mapBusStops : stops}
         selectedId={(bus ? selectedBus?.id : selected?.id) ?? null}
         favoriteIds={favorites.ids}
         focus={focus}
@@ -237,6 +270,8 @@ export function App() {
               }
             : null
         }
+        buses={bus && followed ? [followed] : undefined}
+        busFocus={bus ? busFocus : null}
         route={!bus && tracked && routePath.length > 1 ? { path: routePath, color: tracked.line.color } : null}
       />
       <div className="overlay">
@@ -298,6 +333,9 @@ export function App() {
             isFavorite={favorites.isFavorite(selectedBus.id)}
             onToggleFavorite={() => toggleFavorite(selectedBus.id, selectedBus.name)}
             onClose={() => setSelectedBus(null)}
+            onVehicles={setBuses}
+            onPickVehicle={pickBus}
+            followingId={followed?.id ?? null}
           />
         )}
       </div>
